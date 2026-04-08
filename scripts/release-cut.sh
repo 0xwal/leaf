@@ -162,7 +162,10 @@ if git diff --quiet -- Cargo.toml; then
     exit 1
 fi
 
-git add Cargo.toml
+# Refresh Cargo.lock so the root package version stays in sync in the release commit.
+cargo update --workspace >/dev/null
+
+git add Cargo.toml Cargo.lock
 git commit -m "$VERSION"
 git tag "$TAG"
 git push origin "HEAD:$BRANCH"
