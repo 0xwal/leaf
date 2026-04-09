@@ -1,15 +1,12 @@
 use crate::{
     app::{App, FileChange},
-    render::ui,
+    render::{ui, CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH},
 };
 use anyhow::Result;
 use crossterm::event::{self, poll, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{fs::OpenOptions, io, io::Write, time::Duration};
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
-
-const CONTENT_HORIZONTAL_PADDING: u16 = 1;
-const SCROLLBAR_WIDTH: u16 = 1;
 
 pub(crate) fn should_handle_key(kind: KeyEventKind) -> bool {
     !matches!(kind, KeyEventKind::Release)
@@ -160,15 +157,9 @@ pub(crate) fn run(
                             KeyCode::Char('k') | KeyCode::Up => app.scroll_up(1),
                             KeyCode::Char('d') | KeyCode::PageDown => app.scroll_down(20),
                             KeyCode::Char('u') | KeyCode::PageUp => app.scroll_up(20),
-                            KeyCode::Char('g') | KeyCode::Home => {
-                                app.scroll = 0;
-                            }
-                            KeyCode::Char('G') | KeyCode::End => {
-                                app.scroll = app.total().saturating_sub(1);
-                            }
-                            KeyCode::Char('t') => {
-                                app.toc_visible = !app.toc_visible;
-                            }
+                            KeyCode::Char('g') | KeyCode::Home => app.scroll_top(),
+                            KeyCode::Char('G') | KeyCode::End => app.scroll_bottom(),
+                            KeyCode::Char('t') => app.toggle_toc(),
                             KeyCode::Char('T') => {
                                 app.open_theme_picker();
                             }
@@ -176,8 +167,7 @@ pub(crate) fn run(
                                 app.open_help();
                             }
                             KeyCode::Char('r') if app.watch => {
-                                app.last_file_state = None;
-                                app.reload(ss, themes);
+                                app.request_reload(ss, themes);
                             }
                             KeyCode::Char('f')
                                 if key.modifiers.contains(KeyModifiers::CONTROL) =>

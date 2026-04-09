@@ -14,8 +14,8 @@ use ratatui::{
     Frame,
 };
 
-const CONTENT_HORIZONTAL_PADDING: u16 = 1;
-const SCROLLBAR_WIDTH: u16 = 1;
+pub(crate) const CONTENT_HORIZONTAL_PADDING: u16 = 1;
+pub(crate) const SCROLLBAR_WIDTH: u16 = 1;
 
 pub(crate) fn ui(f: &mut Frame, app: &mut App) {
     let area = f.area();

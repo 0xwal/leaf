@@ -19,6 +19,8 @@ use syntect::{
 };
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+const TAB_STOP: usize = 4;
+
 #[derive(Clone, Copy)]
 enum ListKind {
     Unordered,
@@ -101,8 +103,6 @@ pub(crate) fn truncate_display_width(text: &str, max_width: usize) -> String {
 }
 
 pub(crate) fn display_width(text: &str) -> usize {
-    const TAB_STOP: usize = 4;
-
     let mut width = 0;
     for ch in text.chars() {
         if ch == '\t' {
@@ -115,8 +115,6 @@ pub(crate) fn display_width(text: &str) -> usize {
 }
 
 fn expand_tabs(text: &str, start_width: usize) -> String {
-    const TAB_STOP: usize = 4;
-
     let mut out = String::new();
     let mut width = start_width;
     for ch in text.chars() {

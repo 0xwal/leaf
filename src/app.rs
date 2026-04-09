@@ -563,6 +563,23 @@ impl App {
         self.scroll = self.scroll.saturating_sub(n);
     }
 
+    pub(crate) fn scroll_top(&mut self) {
+        self.scroll = 0;
+    }
+
+    pub(crate) fn scroll_bottom(&mut self) {
+        self.scroll = self.total().saturating_sub(1);
+    }
+
+    pub(crate) fn toggle_toc(&mut self) {
+        self.toc_visible = !self.toc_visible;
+    }
+
+    pub(crate) fn request_reload(&mut self, ss: &SyntaxSet, themes: &ThemeSet) -> bool {
+        self.last_file_state = None;
+        self.reload(ss, themes)
+    }
+
     pub(crate) fn jump_to_toc(&mut self, idx: usize) {
         if let Some(e) = self.toc.get(idx) {
             self.scroll = e.line;
