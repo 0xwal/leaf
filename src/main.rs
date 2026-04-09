@@ -13,7 +13,7 @@ mod terminal;
 mod tests;
 mod theme;
 
-use app::App;
+use app::{App, AppConfig};
 use cli::{parse_cli, print_usage, print_version, CliOptions};
 use markdown::{hash_str, parse_markdown, read_file_state};
 use runtime::run;
@@ -105,12 +105,14 @@ fn main() -> Result<()> {
     let mut app = App::new_with_source(
         lines,
         toc,
-        filename,
-        src,
-        debug_input,
-        watch,
-        filepath,
-        last_file_state,
+        AppConfig {
+            filename,
+            source: src,
+            debug_input,
+            watch,
+            filepath,
+            last_file_state,
+        },
     );
     app.set_last_content_hash(last_content_hash);
     if let Some(dir) = open_picker_dir {

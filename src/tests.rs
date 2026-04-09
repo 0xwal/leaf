@@ -73,11 +73,13 @@ fn search_matches_across_span_boundaries() {
     let (lines, toc) = parse_markdown("hello **world**", &ss, &theme);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
-    app.search_query = "hello world".to_string();
+    app.set_search_query("hello world");
     app.run_search();
 
-    assert_eq!(app.search_matches.len(), 1);
-    assert!(line_plain_text(&app.lines[app.search_matches[0]]).contains("hello world"));
+    assert_eq!(app.search_match_count(), 1);
+    assert!(
+        line_plain_text(app.line(app.search_matches()[0]).unwrap()).contains("hello world")
+    );
 }
 
 #[test]
@@ -93,18 +95,18 @@ fn cancelling_search_clears_query_and_matches() {
     let (lines, toc) = parse_markdown("alpha\nbeta\nalpha beta\n", &ss, &theme);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
-    app.search_query = "alpha".to_string();
+    app.set_search_query("alpha");
     app.run_search();
 
     app.begin_search();
-    app.search_draft.push_str(" gamma");
+    app.set_search_draft("alpha gamma");
     app.cancel_search();
 
-    assert!(!app.search_mode);
-    assert!(app.search_draft.is_empty());
-    assert!(app.search_query.is_empty());
-    assert!(app.search_matches.is_empty());
-    assert_eq!(app.search_idx, 0);
+    assert!(!app.is_search_mode());
+    assert!(app.search_draft().is_empty());
+    assert!(app.search_query().is_empty());
+    assert!(app.search_matches().is_empty());
+    assert_eq!(app.search_index(), 0);
 }
 
 #[test]
@@ -114,13 +116,13 @@ fn confirm_search_uses_draft_and_updates_matches() {
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     app.begin_search();
-    app.search_draft = "beta".to_string();
+    app.set_search_draft("beta");
     app.confirm_search();
 
-    assert!(!app.search_mode);
-    assert!(app.search_draft.is_empty());
-    assert_eq!(app.search_query, "beta");
-    assert_eq!(app.search_matches.len(), 2);
+    assert!(!app.is_search_mode());
+    assert!(app.search_draft().is_empty());
+    assert_eq!(app.search_query(), "beta");
+    assert_eq!(app.search_match_count(), 2);
 }
 
 #[test]
@@ -129,17 +131,17 @@ fn confirm_search_with_new_query_restarts_from_first_match() {
     let (lines, toc) = parse_markdown("alpha\nbeta\nbeta again\n", &ss, &theme);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
-    app.search_query = "alpha".to_string();
+    app.set_search_query("alpha");
     app.run_search();
 
     app.begin_search();
-    app.search_draft = "beta".to_string();
+    app.set_search_draft("beta");
     app.confirm_search();
 
-    assert_eq!(app.search_query, "beta");
-    assert_eq!(app.search_idx, 0);
-    assert_eq!(app.scroll, app.search_matches[0]);
-    assert_eq!(app.search_matches.len(), 2);
+    assert_eq!(app.search_query(), "beta");
+    assert_eq!(app.search_index(), 0);
+    assert_eq!(app.scroll(), app.search_matches()[0]);
+    assert_eq!(app.search_match_count(), 2);
 }
 
 #[test]
@@ -148,14 +150,14 @@ fn enter_in_normal_mode_advances_active_search() {
     let (lines, toc) = parse_markdown("alpha\nbeta alpha\nalpha again\n", &ss, &theme);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
-    app.search_query = "alpha".to_string();
+    app.set_search_query("alpha");
     app.run_search();
-    let second_match = app.search_matches[1];
+    let second_match = app.search_matches()[1];
 
     app.next_match();
 
-    assert_eq!(app.search_idx, 1);
-    assert_eq!(app.scroll, second_match);
+    assert_eq!(app.search_index(), 1);
+    assert_eq!(app.scroll(), second_match);
 }
 
 #[test]
@@ -164,17 +166,17 @@ fn ctrl_c_cancels_search_prompt_and_clears_active_query() {
     let (lines, toc) = parse_markdown("alpha\nbeta\n", &ss, &theme);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
-    app.search_query = "alpha".to_string();
+    app.set_search_query("alpha");
     app.run_search();
 
     app.begin_search();
-    app.search_draft.push('z');
+    app.push_search_draft('z');
     app.cancel_search();
 
-    assert!(!app.search_mode);
-    assert!(app.search_query.is_empty());
-    assert!(app.search_matches.is_empty());
-    assert_eq!(app.search_idx, 0);
+    assert!(!app.is_search_mode());
+    assert!(app.search_query().is_empty());
+    assert!(app.search_matches().is_empty());
+    assert_eq!(app.search_index(), 0);
 }
 
 #[test]
@@ -183,15 +185,15 @@ fn esc_clears_active_search_from_normal_mode() {
     let (lines, toc) = parse_markdown("alpha\nbeta alpha\n", &ss, &theme);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
-    app.search_query = "alpha".to_string();
+    app.set_search_query("alpha");
     app.run_search();
     app.clear_active_search();
 
-    assert!(!app.search_mode);
-    assert!(app.search_draft.is_empty());
-    assert!(app.search_query.is_empty());
-    assert!(app.search_matches.is_empty());
-    assert_eq!(app.search_idx, 0);
+    assert!(!app.is_search_mode());
+    assert!(app.search_draft().is_empty());
+    assert!(app.search_query().is_empty());
+    assert!(app.search_matches().is_empty());
+    assert_eq!(app.search_index(), 0);
 }
 
 #[test]
@@ -200,13 +202,13 @@ fn ctrl_c_clears_active_search_before_exit() {
     let (lines, toc) = parse_markdown("alpha\nbeta alpha\n", &ss, &theme);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
-    app.search_query = "alpha".to_string();
+    app.set_search_query("alpha");
     app.run_search();
     app.clear_active_search();
 
     assert!(!app.has_active_search());
-    assert!(app.search_query.is_empty());
-    assert!(app.search_matches.is_empty());
+    assert!(app.search_query().is_empty());
+    assert!(app.search_matches().is_empty());
 }
 
 #[test]
@@ -572,18 +574,20 @@ fn theme_picker_restores_original_preset_on_escape() {
     let mut app = App::new_with_source(
         lines,
         toc,
-        "stdin".to_string(),
-        "# Demo\n".to_string(),
-        false,
-        false,
-        None,
-        None,
+        AppConfig {
+            filename: "stdin".to_string(),
+            source: "# Demo\n".to_string(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
     );
 
     let original = current_theme_preset();
     set_theme_preset(ThemePreset::OceanDark);
     app.open_theme_picker();
-    app.theme_picker_index = theme_preset_index(ThemePreset::Forest);
+    assert!(app.set_theme_picker_index(theme_preset_index(ThemePreset::Forest)));
     app.preview_theme_preset(ThemePreset::Forest, &ss, &ts);
 
     assert_eq!(current_theme_preset(), ThemePreset::Forest);
@@ -591,8 +595,8 @@ fn theme_picker_restores_original_preset_on_escape() {
     app.restore_theme_picker_preview(&ss, &ts);
 
     assert_eq!(current_theme_preset(), ThemePreset::OceanDark);
-    assert!(!app.theme_picker_open);
-    assert_eq!(app.theme_picker_original, None);
+    assert!(!app.is_theme_picker_open());
+    assert_eq!(app.theme_picker_original(), None);
     set_theme_preset(original);
 }
 
@@ -605,12 +609,14 @@ fn theme_picker_caches_previewed_themes_for_reuse() {
     let mut app = App::new_with_source(
         lines,
         toc,
-        "stdin".to_string(),
-        "# Demo\n\n```rs\nfn main() {}\n```\n".to_string(),
-        false,
-        false,
-        None,
-        None,
+        AppConfig {
+            filename: "stdin".to_string(),
+            source: "# Demo\n\n```rs\nfn main() {}\n```\n".to_string(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
     );
 
     let original = current_theme_preset();
@@ -618,13 +624,12 @@ fn theme_picker_caches_previewed_themes_for_reuse() {
     app.open_theme_picker();
     app.preview_theme_preset(ThemePreset::Forest, &ss, &ts);
 
-    let cached = app.theme_preview_cache[theme_preset_index(ThemePreset::Forest)].as_ref();
-    assert!(cached.is_some());
+    assert!(app.has_cached_theme_preview(ThemePreset::Forest));
     assert_eq!(current_theme_preset(), ThemePreset::Forest);
 
     app.preview_theme_preset(ThemePreset::OceanDark, &ss, &ts);
     assert_eq!(current_theme_preset(), ThemePreset::OceanDark);
-    assert!(app.theme_preview_cache[theme_preset_index(ThemePreset::OceanDark)].is_some());
+    assert!(app.has_cached_theme_preview(ThemePreset::OceanDark));
     set_theme_preset(original);
 }
 
@@ -644,20 +649,22 @@ fn file_picker_lists_dirs_then_markdown_files_only() {
     let mut app = App::new_with_source(
         Vec::new(),
         Vec::new(),
-        "picker".to_string(),
-        String::new(),
-        false,
-        false,
-        None,
-        None,
+        AppConfig {
+            filename: "picker".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
     );
 
     assert!(app.open_file_picker(root.clone()));
 
     let labels: Vec<_> = app
-        .file_picker_entries
+        .file_picker_entries()
         .iter()
-        .map(|entry| entry.label.as_str())
+        .map(|entry| entry.label())
         .collect();
     assert!(labels.contains(&"notes/"));
     assert!(labels.contains(&"README.md"));

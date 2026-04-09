@@ -24,7 +24,8 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
         .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(area);
 
-    let (toc_area, content_area): (Option<Rect>, Rect) = if app.toc_visible && !app.toc.is_empty() {
+    let (toc_area, content_area): (Option<Rect>, Rect) =
+        if app.is_toc_visible() && app.has_toc() {
         let cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(30), Constraint::Min(0)])
@@ -71,7 +72,7 @@ fn render_toc_panel(f: &mut Frame, app: &mut App, area: Rect) {
         toc_chunks[0],
     );
     f.render_widget(
-        Paragraph::new(app.toc_display_lines.clone())
+        Paragraph::new(app.toc_display_lines().to_vec())
             .style(Style::default().bg(theme.ui.toc_bg))
             .block(
                 Block::default()
@@ -82,7 +83,7 @@ fn render_toc_panel(f: &mut Frame, app: &mut App, area: Rect) {
         toc_chunks[1],
     );
     f.render_widget(
-        Paragraph::new(vec![app.toc_header_line.clone()])
+        Paragraph::new(vec![app.toc_header_line().clone()])
             .style(Style::default().bg(theme.ui.toc_bg)),
         Rect {
             x: toc_chunks[0].x,
@@ -100,18 +101,18 @@ fn render_content_panel(f: &mut Frame, app: &mut App, area: Rect, viewport_heigh
         area,
     );
     let content_area = inner_content_area(area);
-    let scroll = app.scroll;
+    let scroll = app.scroll();
     let active_highlight_line = app.active_highlight_line();
     if let Some(line_idx) = active_highlight_line {
         let _ = app.refresh_highlighted_line_cache(line_idx);
     }
 
-    let visible_end = (scroll + viewport_height).min(app.lines.len());
-    let mut visible_lines = app.lines[scroll..visible_end].to_vec();
+    let visible_end = (scroll + viewport_height).min(app.total());
+    let mut visible_lines = app.visible_lines(scroll, visible_end).to_vec();
 
     if let Some(line_idx) = active_highlight_line {
         if (scroll..visible_end).contains(&line_idx) {
-            if let Some((_, highlighted_line)) = &app.highlighted_line_cache {
+            if let Some((_, highlighted_line)) = app.highlighted_line_cache() {
                 visible_lines[line_idx - scroll] = highlighted_line.clone();
             }
         }
@@ -124,7 +125,7 @@ fn render_content_panel(f: &mut Frame, app: &mut App, area: Rect, viewport_heigh
         content_area,
     );
 
-    let mut scrollbar_state = ScrollbarState::new(app.total()).position(app.scroll);
+    let mut scrollbar_state = ScrollbarState::new(app.total()).position(app.scroll());
     f.render_stateful_widget(
         Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(None)
@@ -154,7 +155,7 @@ fn render_status_bar(f: &mut Frame, app: &mut App, area: Rect, viewport_height: 
     app.refresh_status_cache(pct);
 
     f.render_widget(
-        Paragraph::new(vec![app.status_line.clone()]).style(Style::default().bg(bar_bg)),
+        Paragraph::new(vec![app.status_line().clone()]).style(Style::default().bg(bar_bg)),
         area,
     );
 }
@@ -206,12 +207,12 @@ pub(crate) fn status_filename_section(filename: &str) -> Vec<Span<'static>> {
 
 pub(crate) fn status_watch_section(app: &App) -> Option<Vec<Span<'static>>> {
     let theme = app_theme();
-    if !app.watch {
+    if !app.is_watch_enabled() {
         return None;
     }
 
     let flash_active = app
-        .reload_flash
+        .reload_flash_started()
         .map(|t| t.elapsed() < std::time::Duration::from_millis(1500))
         .unwrap_or(false);
     let span = if flash_active {
@@ -235,29 +236,29 @@ pub(crate) fn status_watch_section(app: &App) -> Option<Vec<Span<'static>>> {
 
 pub(crate) fn status_search_section(app: &App) -> Option<Vec<Span<'static>>> {
     let theme = app_theme();
-    if app.search_mode {
+    if app.is_search_mode() {
         return Some(vec![Span::styled(
-            format!(" /{}", app.search_draft),
+            format!(" /{}", app.search_draft()),
             Style::default()
                 .fg(theme.ui.status_search_fg)
                 .bg(theme.ui.status_search_bg),
         )]);
     }
 
-    if app.search_query.is_empty() {
+    if app.search_query().is_empty() {
         return None;
     }
 
-    let span = if app.search_matches.is_empty() {
+    let span = if app.search_match_count() == 0 {
         Span::styled(
-            format!(" ✗ {} ", app.search_query),
+            format!(" ✗ {} ", app.search_query()),
             Style::default()
                 .fg(theme.ui.status_search_error_fg)
                 .bg(theme.ui.status_search_bg),
         )
     } else {
         Span::styled(
-            format!(" {}/{} ", app.search_idx + 1, app.search_matches.len()),
+            format!(" {}/{} ", app.search_index() + 1, app.search_match_count()),
             Style::default()
                 .fg(theme.ui.status_search_match_fg)
                 .bg(theme.ui.status_search_bg),
@@ -267,13 +268,13 @@ pub(crate) fn status_search_section(app: &App) -> Option<Vec<Span<'static>>> {
 }
 
 pub(crate) fn status_hint_segments(app: &App) -> &'static [&'static str] {
-    if app.search_mode {
+    if app.is_search_mode() {
         &["enter confirm", "esc cancel"]
-    } else if app.file_picker_open {
+    } else if app.is_file_picker_open() {
         &["j/k move", "enter open", "backspace up", "q quit"]
-    } else if app.theme_picker_open {
+    } else if app.is_theme_picker_open() {
         &["j/k preview", "enter keep", "esc restore"]
-    } else if app.help_open {
+    } else if app.is_help_open() {
         &["esc close", "? close"]
     } else if app.has_active_search() {
         &[
@@ -475,18 +476,18 @@ fn render_file_picker(f: &mut Frame, app: &App) {
     let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
     let inner_height = area.height.saturating_sub(2) as usize;
     let visible_slots = inner_height.saturating_sub(5);
-    let total = app.file_picker_entries.len();
-    let start = if visible_slots == 0 || app.file_picker_index < visible_slots {
+    let total = app.file_picker_entries().len();
+    let start = if visible_slots == 0 || app.file_picker_index() < visible_slots {
         0
     } else {
-        app.file_picker_index + 1 - visible_slots
+        app.file_picker_index() + 1 - visible_slots
     };
     let end = (start + visible_slots).min(total);
 
     let mut lines = vec![
         Line::from(vec![Span::styled("Open a Markdown file", title_style)]),
         Line::from(vec![Span::styled(
-            app.file_picker_dir.display().to_string(),
+            app.file_picker_dir().display().to_string(),
             section_style,
         )]),
         Line::from(""),
@@ -498,9 +499,9 @@ fn render_file_picker(f: &mut Frame, app: &App) {
             Style::default().fg(theme.ui.toc_primary_inactive),
         )]));
     } else {
-        for (idx, entry) in app.file_picker_entries[start..end].iter().enumerate() {
+        for (idx, entry) in app.file_picker_entries()[start..end].iter().enumerate() {
             let actual_idx = start + idx;
-            let selected = actual_idx == app.file_picker_index;
+            let selected = actual_idx == app.file_picker_index();
             let bg = if selected {
                 theme.ui.toc_active_bg
             } else {
@@ -520,9 +521,9 @@ fn render_file_picker(f: &mut Frame, app: &App) {
                         }),
                 ),
                 Span::styled(
-                    entry.label.clone(),
+                    entry.label().to_string(),
                     Style::default()
-                        .fg(if entry.is_dir {
+                        .fg(if entry.is_dir() {
                             theme.ui.toc_primary_active
                         } else {
                             theme.ui.toc_primary_inactive
@@ -599,7 +600,7 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
     let outer_separator = Span::raw(" ");
 
     let mut left_section = status_brand_section();
-    left_section.extend(status_filename_section(&app.filename));
+    left_section.extend(status_filename_section(app.filename()));
 
     if let Some(section) = status_search_section(app) {
         left_section.extend(section);

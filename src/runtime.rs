@@ -43,8 +43,8 @@ pub(crate) fn run(
             needs_redraw = false;
         }
 
-        let poll_timeout = if app.watch {
-            let flash_timeout = app.reload_flash.and_then(|started| {
+        let poll_timeout = if app.is_watch_enabled() {
+            let flash_timeout = app.reload_flash_started().and_then(|started| {
                 let elapsed = started.elapsed();
                 (elapsed < FLASH_DURATION).then_some(FLASH_DURATION - elapsed)
             });
@@ -55,23 +55,23 @@ pub(crate) fn run(
             Duration::MAX
         };
 
-        let event_available = if app.watch { poll(poll_timeout)? } else { true };
+        let event_available = if app.is_watch_enabled() { poll(poll_timeout)? } else { true };
 
         if event_available {
             match event::read()? {
                 Event::Key(key) => {
                     debug_log(
-                        app.debug_input,
+                        app.debug_input_enabled(),
                         &format!(
                             "key_event kind={:?} code={:?} modifiers={:?} search_mode={} query={:?} draft={:?} matches={} idx={}",
                             key.kind,
                             key.code,
                             key.modifiers,
-                            app.search_mode,
-                            app.search_query,
-                            app.search_draft,
-                            app.search_matches.len(),
-                            app.search_idx
+                            app.is_search_mode(),
+                            app.search_query(),
+                            app.search_draft(),
+                            app.search_match_count(),
+                            app.search_index()
                         ),
                     );
                     if !should_handle_key(key.kind) {
@@ -126,19 +126,15 @@ pub(crate) fn run(
                                 app.preview_theme_preset(preset, ss, themes);
                             }
                         }
-                    } else if app.search_mode {
+                    } else if app.is_search_mode() {
                         match key.code {
                             KeyCode::Esc => app.cancel_search(),
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 app.cancel_search();
                             }
                             KeyCode::Enter => app.confirm_search(),
-                            KeyCode::Backspace => {
-                                app.search_draft.pop();
-                            }
-                            KeyCode::Char(c) => {
-                                app.search_draft.push(c);
-                            }
+                            KeyCode::Backspace => app.pop_search_draft(),
+                            KeyCode::Char(c) => app.push_search_draft(c),
                             _ => state_changed = false,
                         }
                     } else {
@@ -166,7 +162,7 @@ pub(crate) fn run(
                             KeyCode::Char('?') => {
                                 app.open_help();
                             }
-                            KeyCode::Char('r') if app.watch => {
+                            KeyCode::Char('r') if app.is_watch_enabled() => {
                                 app.request_reload(ss, themes);
                             }
                             KeyCode::Char('f')
@@ -220,19 +216,19 @@ pub(crate) fn run(
             }
         }
 
-        if app.watch {
+        if app.is_watch_enabled() {
             if let Some(change) = app.check_modified() {
                 std::thread::sleep(Duration::from_millis(50));
                 if app.reload(ss, themes) {
-                    app.last_file_state = Some(match change {
+                    app.set_last_file_state(match change {
                         FileChange::Metadata(state) | FileChange::Content(state) => state,
                     });
                     needs_redraw = true;
                 }
             }
-            if let Some(t) = app.reload_flash {
+            if let Some(t) = app.reload_flash_started() {
                 if t.elapsed() >= FLASH_DURATION {
-                    app.reload_flash = None;
+                    app.clear_reload_flash();
                     needs_redraw = true;
                 }
             }
@@ -248,7 +244,7 @@ fn sync_render_width(
     themes: &ThemeSet,
 ) -> Result<bool> {
     let area = terminal.size()?;
-    let content_width = if app.toc_visible && !app.toc.is_empty() {
+    let content_width = if app.is_toc_visible() && app.has_toc() {
         area.width.saturating_sub(30)
     } else {
         area.width
