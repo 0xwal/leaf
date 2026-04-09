@@ -1,6 +1,6 @@
 use crate::theme::{current_theme_preset, set_theme_preset, theme_preset_index};
 use crate::*;
-use crate::markdown::{parse_markdown, parse_markdown_with_width};
+use crate::markdown::{parse_markdown, parse_markdown_with_width, resolve_syntax};
 use crossterm::event::KeyEventKind;
 use ratatui::backend::TestBackend;
 use ratatui::{text::Line, widgets::Paragraph, Terminal};
@@ -552,6 +552,16 @@ fn parse_theme_preset_supports_ocean_and_forest() {
         Some(ThemePreset::SolarizedDark)
     );
     assert_eq!(parse_theme_preset("nope"), None);
+}
+
+#[test]
+fn resolve_syntax_supports_common_language_aliases() {
+    let ss = SyntaxSet::load_defaults_newlines();
+
+    assert_eq!(resolve_syntax("py", &ss).name, resolve_syntax("python", &ss).name);
+    assert_eq!(resolve_syntax("cpp", &ss).name, resolve_syntax("c++", &ss).name);
+    assert_eq!(resolve_syntax("json", &ss).name, "JSON");
+    assert_eq!(resolve_syntax("ps1", &ss).name, resolve_syntax("powershell", &ss).name);
 }
 
 #[test]
