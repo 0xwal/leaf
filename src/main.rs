@@ -12,6 +12,7 @@ mod terminal;
 #[cfg(test)]
 mod tests;
 mod theme;
+mod update;
 
 use app::{App, AppConfig};
 use cli::{parse_cli, print_usage, print_version, CliOptions};
@@ -19,6 +20,7 @@ use markdown::{hash_str, parse_markdown, read_file_state};
 use runtime::run;
 use terminal::{finish_with_restore, TerminalSession};
 use theme::{current_syntect_theme, set_theme_preset};
+use update::run_update;
 
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
@@ -32,6 +34,11 @@ pub(crate) use markdown::{display_width, line_plain_text};
 pub(crate) use runtime::should_handle_key;
 #[cfg(test)]
 pub(crate) use theme::{parse_theme_preset, theme_preset_label, ThemePreset, THEME_PRESETS};
+#[cfg(test)]
+pub(crate) use update::{
+    asset_name_for_target, expected_asset_download_url, find_expected_checksum,
+    is_newer_version, validate_download_size, validate_sha256_hex,
+};
 #[cfg(test)]
 pub(crate) use read_stdin_limited as read_stdin_with_limit;
 
@@ -64,6 +71,10 @@ fn main() -> Result<()> {
     }
     if options.print_version {
         print_version();
+        return Ok(());
+    }
+    if options.update {
+        run_update()?;
         return Ok(());
     }
     let CliOptions {

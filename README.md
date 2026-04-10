@@ -75,6 +75,9 @@ cat TESTING.md | leaf
 
 # Open the file picker in the current directory
 leaf
+
+# Update to the latest published version
+leaf --update
 ```
 
 ## Keybindings
@@ -107,6 +110,7 @@ leaf
 - ✅ Bold, italic, strikethrough, blockquotes, lists, and horizontal rules
 - ✅ YAML frontmatter is ignored in both preview and TOC
 - ✅ Native stdin input with bounded size
+- ✅ `leaf --update` to fetch, verify via published SHA256, and install the latest release on supported platforms
 - ✅ File picker when launched without a file
 - ✅ Theme picker with runtime preview
 - ✅ Help modal with in-app shortcuts
@@ -141,3 +145,11 @@ Direct download for the latest supported **X64** Microsoft Visual C++ Redistribu
 - https://aka.ms/vc14/vc_redist.x64.exe
 
 For `leaf-windows-x86_64.exe`, the relevant package is the latest supported **X64** Visual C++ v14 Redistributable.
+
+### Windows: `leaf --update`
+
+`leaf --update` verifies the downloaded binary against the published `checksums.txt` SHA256 before installation.
+
+On Unix-like systems, it then replaces the current binary in place.
+
+On Windows, replacing the running `.exe` can be blocked by the OS. If `leaf --update` cannot complete there, rerun the PowerShell installer from the install section.
