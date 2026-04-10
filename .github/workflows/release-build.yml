@@ -5,12 +5,6 @@ on:
     tags:
       - "*.*.*"
 
-env:
-  MACOS_RUNNER: macos-14
-  LINUX_RUNNER: ubuntu-22.04
-  ANDROID_RUNNER: ubuntu-22.04
-  WINDOWS_RUNNER: windows-2022
-
 permissions:
   contents: write
 
@@ -21,27 +15,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ${{ env.MACOS_RUNNER }}
+          - os: macos-14
             artifact_name: leaf-macos-x86_64
             binary_path: target/x86_64-apple-darwin/release/leaf
             target: x86_64-apple-darwin
-          - os: ${{ env.MACOS_RUNNER }}
+          - os: macos-14
             artifact_name: leaf-macos-arm64
             binary_path: target/aarch64-apple-darwin/release/leaf
             target: aarch64-apple-darwin
-          - os: ${{ env.LINUX_RUNNER }}
+          - os: ubuntu-22.04
             artifact_name: leaf-linux-x86_64
             binary_path: target/release/leaf
             target: ""
-          - os: ${{ env.LINUX_RUNNER }}
+          - os: ubuntu-22.04
             artifact_name: leaf-linux-arm64
             binary_path: target/aarch64-unknown-linux-gnu/release/leaf
             target: aarch64-unknown-linux-gnu
-          - os: ${{ env.ANDROID_RUNNER }}
+          - os: ubuntu-22.04
             artifact_name: leaf-android-arm64
             binary_path: target/aarch64-linux-android/release/leaf
             target: aarch64-linux-android
-          - os: ${{ env.WINDOWS_RUNNER }}
+          - os: windows-2022
             artifact_name: leaf-windows-x86_64.exe
             binary_path: target/release/leaf.exe
             target: ""
