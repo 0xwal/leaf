@@ -114,6 +114,12 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum leaf-* > checksums.txt
+
       - name: Ensure GitHub release exists
         env:
           GH_REPO: ${{ github.repository }}

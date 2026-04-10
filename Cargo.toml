@@ -16,3 +16,7 @@ pulldown-cmark = "0.12"
 syntect       = "5.2"
 anyhow        = "1.0"
 unicode-width = "0.1"
+reqwest       = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde         = { version = "1.0", features = ["derive"] }
+semver        = "1.0"
+sha2          = "0.10"
