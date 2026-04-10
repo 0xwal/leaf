@@ -1,15 +1,17 @@
 use crate::{
     app::{App, FileChange},
-    render::ui,
+    render::{ui, CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH},
 };
 use anyhow::Result;
 use crossterm::event::{self, poll, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{fs::OpenOptions, io, io::Write, time::Duration};
+use std::{
+    fs::OpenOptions,
+    io,
+    io::Write,
+    time::{Duration, Instant},
+};
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
-
-const CONTENT_HORIZONTAL_PADDING: u16 = 1;
-const SCROLLBAR_WIDTH: u16 = 1;
 
 pub(crate) fn should_handle_key(kind: KeyEventKind) -> bool {
     !matches!(kind, KeyEventKind::Release)
@@ -37,7 +39,9 @@ pub(crate) fn run(
     const WATCH_INTERVAL: Duration = Duration::from_millis(250);
     const FLASH_DURATION: Duration = Duration::from_millis(1500);
     const MOUSE_SCROLL_STEP: usize = 3;
+    const RESIZE_DEBOUNCE: Duration = Duration::from_millis(120);
     let mut needs_redraw = true;
+    let mut pending_resize: Option<Instant> = None;
     sync_render_width(terminal, app, ss, themes)?;
 
     loop {
@@ -46,35 +50,45 @@ pub(crate) fn run(
             needs_redraw = false;
         }
 
-        let poll_timeout = if app.watch {
-            let flash_timeout = app.reload_flash.and_then(|started| {
-                let elapsed = started.elapsed();
-                (elapsed < FLASH_DURATION).then_some(FLASH_DURATION - elapsed)
-            });
-            flash_timeout
-                .map(|remaining| remaining.min(WATCH_INTERVAL))
-                .unwrap_or(WATCH_INTERVAL)
+        let flash_timeout = app.reload_flash_started().and_then(|started| {
+            let elapsed = started.elapsed();
+            (elapsed < FLASH_DURATION).then_some(FLASH_DURATION - elapsed)
+        });
+        let resize_timeout = pending_resize.and_then(|started| {
+            let elapsed = started.elapsed();
+            (elapsed < RESIZE_DEBOUNCE).then_some(RESIZE_DEBOUNCE - elapsed)
+        });
+        let poll_timeout = [if app.is_watch_enabled() {
+            Some(WATCH_INTERVAL)
         } else {
-            Duration::MAX
-        };
+            None
+        }, flash_timeout, resize_timeout]
+        .into_iter()
+        .flatten()
+        .min()
+        .unwrap_or(Duration::MAX);
 
-        let event_available = if app.watch { poll(poll_timeout)? } else { true };
+        let event_available = if poll_timeout == Duration::MAX {
+            true
+        } else {
+            poll(poll_timeout)?
+        };
 
         if event_available {
             match event::read()? {
                 Event::Key(key) => {
                     debug_log(
-                        app.debug_input,
+                        app.debug_input_enabled(),
                         &format!(
                             "key_event kind={:?} code={:?} modifiers={:?} search_mode={} query={:?} draft={:?} matches={} idx={}",
                             key.kind,
                             key.code,
                             key.modifiers,
-                            app.search_mode,
-                            app.search_query,
-                            app.search_draft,
-                            app.search_matches.len(),
-                            app.search_idx
+                            app.is_search_mode(),
+                            app.search_query(),
+                            app.search_draft(),
+                            app.search_match_count(),
+                            app.search_index()
                         ),
                     );
                     if !should_handle_key(key.kind) {
@@ -129,19 +143,15 @@ pub(crate) fn run(
                                 app.preview_theme_preset(preset, ss, themes);
                             }
                         }
-                    } else if app.search_mode {
+                    } else if app.is_search_mode() {
                         match key.code {
                             KeyCode::Esc => app.cancel_search(),
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 app.cancel_search();
                             }
                             KeyCode::Enter => app.confirm_search(),
-                            KeyCode::Backspace => {
-                                app.search_draft.pop();
-                            }
-                            KeyCode::Char(c) => {
-                                app.search_draft.push(c);
-                            }
+                            KeyCode::Backspace => app.pop_search_draft(),
+                            KeyCode::Char(c) => app.push_search_draft(c),
                             _ => state_changed = false,
                         }
                     } else {
@@ -160,24 +170,17 @@ pub(crate) fn run(
                             KeyCode::Char('k') | KeyCode::Up => app.scroll_up(1),
                             KeyCode::Char('d') | KeyCode::PageDown => app.scroll_down(20),
                             KeyCode::Char('u') | KeyCode::PageUp => app.scroll_up(20),
-                            KeyCode::Char('g') | KeyCode::Home => {
-                                app.scroll = 0;
-                            }
-                            KeyCode::Char('G') | KeyCode::End => {
-                                app.scroll = app.total().saturating_sub(1);
-                            }
-                            KeyCode::Char('t') => {
-                                app.toc_visible = !app.toc_visible;
-                            }
+                            KeyCode::Char('g') | KeyCode::Home => app.scroll_top(),
+                            KeyCode::Char('G') | KeyCode::End => app.scroll_bottom(),
+                            KeyCode::Char('t') => app.toggle_toc(),
                             KeyCode::Char('T') => {
                                 app.open_theme_picker();
                             }
                             KeyCode::Char('?') => {
                                 app.open_help();
                             }
-                            KeyCode::Char('r') if app.watch => {
-                                app.last_file_state = None;
-                                app.reload(ss, themes);
+                            KeyCode::Char('r') if app.is_watch_enabled() => {
+                                app.request_reload(ss, themes);
                             }
                             KeyCode::Char('f')
                                 if key.modifiers.contains(KeyModifiers::CONTROL) =>
@@ -223,26 +226,35 @@ pub(crate) fn run(
                     }
                 }
                 Event::Resize(_, _) => {
-                    let _ = sync_render_width(terminal, app, ss, themes)?;
-                    needs_redraw = true;
+                    pending_resize = Some(Instant::now());
                 }
                 _ => {}
             }
         }
 
-        if app.watch {
+        if pending_resize
+            .map(|started| started.elapsed() >= RESIZE_DEBOUNCE)
+            .unwrap_or(false)
+        {
+            pending_resize = None;
+            if sync_render_width(terminal, app, ss, themes)? {
+                needs_redraw = true;
+            }
+        }
+
+        if app.is_watch_enabled() {
             if let Some(change) = app.check_modified() {
                 std::thread::sleep(Duration::from_millis(50));
                 if app.reload(ss, themes) {
-                    app.last_file_state = Some(match change {
+                    app.set_last_file_state(match change {
                         FileChange::Metadata(state) | FileChange::Content(state) => state,
                     });
                     needs_redraw = true;
                 }
             }
-            if let Some(t) = app.reload_flash {
+            if let Some(t) = app.reload_flash_started() {
                 if t.elapsed() >= FLASH_DURATION {
-                    app.reload_flash = None;
+                    app.clear_reload_flash();
                     needs_redraw = true;
                 }
             }
@@ -258,7 +270,7 @@ fn sync_render_width(
     themes: &ThemeSet,
 ) -> Result<bool> {
     let area = terminal.size()?;
-    let content_width = if app.toc_visible && !app.toc.is_empty() {
+    let content_width = if app.is_toc_visible() && app.has_toc() {
         area.width.saturating_sub(30)
     } else {
         area.width

@@ -1,6 +1,6 @@
 use crate::{
     app::{normalize_toc, TocEntry},
-    theme::app_theme,
+    theme::{app_theme, MarkdownTheme},
 };
 use pulldown_cmark::{
     Alignment, CodeBlockKind, Event as MdEvent, HeadingLevel, Options, Parser, Tag, TagEnd,
@@ -19,6 +19,8 @@ use syntect::{
 };
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+const TAB_STOP: usize = 4;
+
 #[derive(Clone, Copy)]
 enum ListKind {
     Unordered,
@@ -34,6 +36,14 @@ enum LastBlock {
 struct ItemState {
     marker_emitted: bool,
     continuation_indent: usize,
+}
+
+#[derive(Clone, Copy, Default)]
+struct InlineStyleState {
+    in_strong: bool,
+    in_em: bool,
+    in_strike: bool,
+    in_link: bool,
 }
 
 struct TableBuf {
@@ -101,8 +111,6 @@ pub(crate) fn truncate_display_width(text: &str, max_width: usize) -> String {
 }
 
 pub(crate) fn display_width(text: &str) -> usize {
-    const TAB_STOP: usize = 4;
-
     let mut width = 0;
     for ch in text.chars() {
         if ch == '\t' {
@@ -115,8 +123,6 @@ pub(crate) fn display_width(text: &str) -> usize {
 }
 
 fn expand_tabs(text: &str, start_width: usize) -> String {
-    const TAB_STOP: usize = 4;
-
     let mut out = String::new();
     let mut width = start_width;
     for ch in text.chars() {
@@ -169,7 +175,10 @@ fn syntect_to_color(c: syntect::highlighting::Color) -> Color {
     Color::Rgb(c.r, c.g, c.b)
 }
 
-fn resolve_syntax<'a>(lang: &str, ss: &'a SyntaxSet) -> &'a syntect::parsing::SyntaxReference {
+pub(crate) fn resolve_syntax<'a>(
+    lang: &str,
+    ss: &'a SyntaxSet,
+) -> &'a syntect::parsing::SyntaxReference {
     let raw = lang.trim();
     let normalized = raw
         .split(|c: char| c.is_whitespace() || c == ',' || c == '{')
@@ -191,6 +200,15 @@ fn resolve_syntax<'a>(lang: &str, ss: &'a SyntaxSet) -> &'a syntect::parsing::Sy
         "js" | "javascript" => &["JavaScript", "js", "javascript"],
         "jsx" => &["JSX", "jsx", "JavaScript React"],
         "shell" | "bash" | "sh" | "zsh" => &["Bourne Again Shell (bash)", "bash", "sh"],
+        "py" | "python" => &["Python", "py", "python"],
+        "c" => &["C", "c"],
+        "cpp" | "cxx" | "cc" | "c++" => &["C++", "cpp", "cxx", "cc"],
+        "json" => &["JSON", "json"],
+        "toml" => &["TOML", "toml"],
+        "java" => &["Java", "java"],
+        "kt" | "kotlin" => &["Kotlin", "kt", "kotlin"],
+        "ps1" | "powershell" | "pwsh" => &["PowerShell", "ps1", "powershell"],
+        "docker" | "dockerfile" => &["Dockerfile", "dockerfile"],
         "yml" | "yaml" => &["YAML", "yml", "yaml"],
         "rs" | "rust" => &["Rust", "rs", "rust"],
         _ if normalized.is_empty() => &[],
@@ -489,6 +507,480 @@ fn push_wrapped_blockquote_lines(
 ) {
     let prefix = block_prefix(true);
     push_wrapped_prefixed_lines(lines, body_spans, prefix.clone(), prefix, render_width);
+}
+
+fn flush_wrapped_spans(
+    lines: &mut Vec<Line<'static>>,
+    spans: &mut Vec<Span<'static>>,
+    blockquote_depth: usize,
+    list_stack: &[ListKind],
+    item_stack: &mut [ItemState],
+    render_width: usize,
+) {
+    if blockquote_depth > 0 && item_stack.is_empty() {
+        push_wrapped_blockquote_lines(lines, spans, render_width);
+    } else if !item_stack.is_empty() {
+        let first_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack);
+        let continuation_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack);
+        push_wrapped_prefixed_lines(
+            lines,
+            spans,
+            first_prefix,
+            continuation_prefix,
+            render_width,
+        );
+    } else if !spans.is_empty() {
+        let mut all = block_prefix(false);
+        all.append(spans);
+        lines.push(Line::from(all));
+    }
+}
+
+fn trim_paragraph_gap_before_block(
+    lines: &mut Vec<Line<'static>>,
+    last_block: LastBlock,
+    item_stack: &[ItemState],
+) {
+    if last_block == LastBlock::Paragraph
+        && item_stack.is_empty()
+        && lines.last().is_some_and(|line| line_plain_text(line).is_empty())
+    {
+        lines.pop();
+    }
+}
+
+fn push_heading_lines(
+    lines: &mut Vec<Line<'static>>,
+    toc: &mut Vec<TocEntry>,
+    spans: &mut Vec<Span<'static>>,
+    level: u8,
+    render_width: usize,
+    theme: &MarkdownTheme,
+) {
+    let color: Color = match level {
+        1 => theme.heading_1,
+        2 => theme.heading_2,
+        3 => theme.heading_3,
+        _ => theme.heading_other,
+    };
+    let style = Style::default().fg(color).add_modifier(match level {
+        1..=3 => Modifier::BOLD,
+        _ => Modifier::empty(),
+    });
+    let title: String = spans.iter().map(|s| s.content.as_ref()).collect();
+    let rendered_title = if level == 3 {
+        format!("{title} ")
+    } else {
+        title.clone()
+    };
+    toc.push(TocEntry {
+        level,
+        title: title.clone(),
+        line: lines.len(),
+    });
+    spans.clear();
+    lines.push(Line::from(vec![Span::styled(rendered_title, style)]));
+
+    match level {
+        1 => lines.push(Line::from(Span::styled(
+            "═".repeat(display_width(&title).min(rule_width(render_width, 0))),
+            Style::default().fg(theme.heading_underline),
+        ))),
+        2 => lines.push(Line::from(Span::styled(
+            "─".repeat(display_width(&title).min(rule_width(render_width, 0))),
+            Style::default().fg(theme.heading_underline),
+        ))),
+        _ => {}
+    }
+}
+
+fn push_code_block_lines(
+    lines: &mut Vec<Line<'static>>,
+    code_buf: &mut String,
+    code_lang: &mut String,
+    ss: &SyntaxSet,
+    theme: &Theme,
+    render_width: usize,
+    theme_colors: &MarkdownTheme,
+) {
+    let label = if code_lang.is_empty() {
+        "text".to_string()
+    } else {
+        code_lang.clone()
+    };
+    let (code_lines, inner_width) = highlight_code(code_buf, code_lang, ss, theme, render_width);
+    let header_width = UnicodeWidthStr::width(label.as_str()) + 3;
+    let top_bar = "─".repeat(inner_width.saturating_sub(header_width));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "┌─ ".to_string(),
+            Style::default().fg(theme_colors.code_frame),
+        ),
+        Span::styled(
+            format!("{label} "),
+            Style::default().fg(theme_colors.code_label),
+        ),
+        Span::styled(
+            format!("{top_bar}┐"),
+            Style::default().fg(theme_colors.code_frame),
+        ),
+    ]));
+    lines.extend(code_lines);
+    lines.push(Line::from(Span::styled(
+        format!("└{}┘", "─".repeat(inner_width)),
+        Style::default().fg(theme_colors.code_frame),
+    )));
+    lines.push(Line::from(""));
+    code_lang.clear();
+    code_buf.clear();
+}
+
+fn inline_text_style(
+    theme: &MarkdownTheme,
+    blockquote_depth: usize,
+    inline: InlineStyleState,
+) -> Style {
+    let mut style = if blockquote_depth > 0 {
+        Style::default()
+            .fg(theme.blockquote_text)
+            .add_modifier(Modifier::ITALIC)
+    } else if inline.in_link {
+        Style::default().fg(theme.link_text)
+    } else {
+        Style::default().fg(theme.text)
+    };
+
+    if inline.in_strong {
+        style = style
+            .fg(theme.strong_text)
+            .add_modifier(Modifier::BOLD);
+    }
+    if inline.in_em {
+        style = style.add_modifier(Modifier::ITALIC);
+    }
+    if inline.in_strike {
+        style = style.add_modifier(Modifier::CROSSED_OUT);
+    }
+
+    style
+}
+
+fn flush_list_item_spans(
+    lines: &mut Vec<Line<'static>>,
+    spans: &mut Vec<Span<'static>>,
+    list_stack: &[ListKind],
+    item_stack: &mut [ItemState],
+    blockquote_depth: usize,
+    render_width: usize,
+) {
+    if spans.is_empty() {
+        return;
+    }
+
+    let first_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack);
+    let continuation_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack);
+    push_wrapped_prefixed_lines(
+        lines,
+        spans,
+        first_prefix,
+        continuation_prefix,
+        render_width,
+    );
+}
+
+fn handle_table_event(
+    table: &mut Option<TableBuf>,
+    ev: &MdEvent<'_>,
+    lines: &mut Vec<Line<'static>>,
+    render_width: usize,
+) -> bool {
+    let Some(tb) = table.as_mut() else {
+        return false;
+    };
+
+    match ev {
+        MdEvent::Text(t) | MdEvent::Code(t) => {
+            tb.push_text(t.as_ref());
+            true
+        }
+        MdEvent::Start(Tag::TableCell) => true,
+        MdEvent::End(TagEnd::TableCell) => {
+            tb.end_cell();
+            true
+        }
+        MdEvent::Start(Tag::TableRow) => true,
+        MdEvent::End(TagEnd::TableRow) => {
+            tb.end_row();
+            true
+        }
+        MdEvent::Start(Tag::TableHead) => {
+            tb.in_header = true;
+            true
+        }
+        MdEvent::End(TagEnd::TableHead) => {
+            tb.end_header();
+            true
+        }
+        MdEvent::Start(Tag::Strong)
+        | MdEvent::End(TagEnd::Strong)
+        | MdEvent::Start(Tag::Emphasis)
+        | MdEvent::End(TagEnd::Emphasis)
+        | MdEvent::Start(Tag::Link { .. })
+        | MdEvent::End(TagEnd::Link) => true,
+        MdEvent::End(TagEnd::Table) => {
+            let rendered = tb.render(render_width);
+            lines.extend(rendered);
+            *table = None;
+            true
+        }
+        _ => true,
+    }
+}
+
+fn start_list(
+    lines: &mut Vec<Line<'static>>,
+    last_block: LastBlock,
+    item_stack: &[ItemState],
+    list_stack: &mut Vec<ListKind>,
+    start: Option<u64>,
+) {
+    trim_paragraph_gap_before_block(lines, last_block, item_stack);
+    list_stack.push(match start {
+        Some(n) => ListKind::Ordered(n),
+        None => ListKind::Unordered,
+    });
+}
+
+fn start_table(table: &mut Option<TableBuf>, aligns: &[Alignment]) {
+    *table = Some(TableBuf::new(aligns.to_vec()));
+}
+
+fn end_list(lines: &mut Vec<Line<'static>>, list_stack: &mut Vec<ListKind>) {
+    list_stack.pop();
+    if list_stack.is_empty() {
+        lines.push(Line::from(""));
+    }
+}
+
+fn start_item(item_stack: &mut Vec<ItemState>) {
+    item_stack.push(ItemState {
+        marker_emitted: false,
+        continuation_indent: 0,
+    });
+}
+
+fn end_item(
+    lines: &mut Vec<Line<'static>>,
+    spans: &mut Vec<Span<'static>>,
+    list_stack: &mut [ListKind],
+    item_stack: &mut Vec<ItemState>,
+    blockquote_depth: usize,
+    render_width: usize,
+) {
+    flush_list_item_spans(
+        lines,
+        spans,
+        list_stack,
+        item_stack,
+        blockquote_depth,
+        render_width,
+    );
+    item_stack.pop();
+    if let Some(ListKind::Ordered(next)) = list_stack.last_mut() {
+        *next += 1;
+    }
+}
+
+fn end_blockquote(
+    lines: &mut Vec<Line<'static>>,
+    spans: &mut Vec<Span<'static>>,
+    blockquote_depth: &mut usize,
+    theme: &MarkdownTheme,
+) {
+    if !spans.is_empty() {
+        let mut all = vec![Span::styled(
+            "▏ ",
+            Style::default().fg(theme.blockquote_marker),
+        )];
+        all.append(spans);
+        lines.push(Line::from(all));
+    }
+    *blockquote_depth = blockquote_depth.saturating_sub(1);
+    lines.push(Line::from(""));
+}
+
+fn push_rule_line(lines: &mut Vec<Line<'static>>, render_width: usize, theme: &MarkdownTheme) {
+    lines.push(Line::from(Span::styled(
+        "─".repeat(rule_width(render_width, 0)),
+        Style::default().fg(theme.rule),
+    )));
+    lines.push(Line::from(""));
+}
+
+fn push_inline_code_span(spans: &mut Vec<Span<'static>>, text: &str, theme: &MarkdownTheme) {
+    spans.push(Span::styled(
+        format!(" {} ", text),
+        Style::default()
+            .fg(theme.inline_code_fg)
+            .bg(theme.inline_code_bg),
+    ));
+}
+
+fn push_link_marker(spans: &mut Vec<Span<'static>>, theme: &MarkdownTheme) {
+    spans.push(Span::styled("⌗", Style::default().fg(theme.link_icon)));
+}
+
+fn handle_inline_style_event(
+    ev: &MdEvent<'_>,
+    inline: &mut InlineStyleState,
+    spans: &mut Vec<Span<'static>>,
+    theme: &MarkdownTheme,
+) -> bool {
+    match ev {
+        MdEvent::Start(Tag::Strong) => {
+            inline.in_strong = true;
+            true
+        }
+        MdEvent::End(TagEnd::Strong) => {
+            inline.in_strong = false;
+            true
+        }
+        MdEvent::Start(Tag::Emphasis) => {
+            inline.in_em = true;
+            true
+        }
+        MdEvent::End(TagEnd::Emphasis) => {
+            inline.in_em = false;
+            true
+        }
+        MdEvent::Start(Tag::Strikethrough) => {
+            inline.in_strike = true;
+            true
+        }
+        MdEvent::End(TagEnd::Strikethrough) => {
+            inline.in_strike = false;
+            true
+        }
+        MdEvent::Start(Tag::Link { .. }) => {
+            inline.in_link = true;
+            push_link_marker(spans, theme);
+            true
+        }
+        MdEvent::End(TagEnd::Link) => {
+            inline.in_link = false;
+            true
+        }
+        _ => false,
+    }
+}
+
+fn heading_level(level: HeadingLevel) -> u8 {
+    match level {
+        HeadingLevel::H1 => 1,
+        HeadingLevel::H2 => 2,
+        HeadingLevel::H3 => 3,
+        _ => 4,
+    }
+}
+
+fn start_heading(in_heading: &mut Option<u8>, level: HeadingLevel) {
+    *in_heading = Some(heading_level(level));
+}
+
+fn end_heading(
+    lines: &mut Vec<Line<'static>>,
+    toc: &mut Vec<TocEntry>,
+    spans: &mut Vec<Span<'static>>,
+    in_heading: &mut Option<u8>,
+    render_width: usize,
+    theme: &MarkdownTheme,
+) {
+    push_heading_lines(
+        lines,
+        toc,
+        spans,
+        in_heading.unwrap_or(1),
+        render_width,
+        theme,
+    );
+    *in_heading = None;
+}
+
+fn start_code_block(
+    lines: &mut Vec<Line<'static>>,
+    last_block: LastBlock,
+    item_stack: &[ItemState],
+    in_code: &mut bool,
+    code_buf: &mut String,
+    code_lang: &mut String,
+    kind: &CodeBlockKind<'_>,
+) {
+    trim_paragraph_gap_before_block(lines, last_block, item_stack);
+    *in_code = true;
+    code_buf.clear();
+    *code_lang = match kind {
+        CodeBlockKind::Fenced(lang) => lang.to_string(),
+        CodeBlockKind::Indented => String::new(),
+    };
+}
+
+fn end_line_break(
+    lines: &mut Vec<Line<'static>>,
+    spans: &mut Vec<Span<'static>>,
+    in_code: bool,
+    blockquote_depth: usize,
+    list_stack: &[ListKind],
+    item_stack: &mut [ItemState],
+    render_width: usize,
+) {
+    if !in_code {
+        flush_wrapped_spans(
+            lines,
+            spans,
+            blockquote_depth,
+            list_stack,
+            item_stack,
+            render_width,
+        );
+    }
+}
+
+fn end_paragraph(
+    lines: &mut Vec<Line<'static>>,
+    spans: &mut Vec<Span<'static>>,
+    blockquote_depth: usize,
+    list_stack: &[ListKind],
+    item_stack: &mut [ItemState],
+    render_width: usize,
+) {
+    flush_wrapped_spans(
+        lines,
+        spans,
+        blockquote_depth,
+        list_stack,
+        item_stack,
+        render_width,
+    );
+    lines.push(Line::from(""));
+}
+
+fn push_text_event(
+    spans: &mut Vec<Span<'static>>,
+    code_buf: &mut String,
+    text: &str,
+    in_code: bool,
+    theme: &MarkdownTheme,
+    blockquote_depth: usize,
+    inline: InlineStyleState,
+) {
+    if in_code {
+        code_buf.push_str(text);
+    } else {
+        spans.push(Span::styled(
+            text.to_string(),
+            inline_text_style(theme, blockquote_depth, inline),
+        ));
+    }
 }
 
 impl TableBuf {
@@ -814,335 +1306,137 @@ pub(crate) fn parse_markdown_with_width(
     let mut code_lang = String::new();
     let mut code_buf = String::new();
     let mut blockquote_depth = 0usize;
-    let mut in_strong = false;
-    let mut in_em = false;
-    let mut in_strike = false;
-    let mut in_link = false;
+    let mut inline = InlineStyleState::default();
     let mut list_stack: Vec<ListKind> = Vec::new();
     let mut item_stack: Vec<ItemState> = Vec::new();
     let mut table: Option<TableBuf> = None;
     let mut last_block = LastBlock::Other;
 
-    macro_rules! flush {
-        ($prefix:expr) => {{
-            if !spans.is_empty() {
-                let mut all: Vec<Span<'static>> = $prefix;
-                all.append(&mut spans);
-                lines.push(Line::from(all));
-            }
-        }};
-    }
-
     for ev in Parser::new_ext(src, Options::all()) {
-        if let Some(ref mut tb) = table {
-            match &ev {
-                MdEvent::Text(t) => {
-                    tb.push_text(t.as_ref());
-                    continue;
-                }
-                MdEvent::Code(t) => {
-                    tb.push_text(t.as_ref());
-                    continue;
-                }
-                MdEvent::Start(Tag::TableCell) | MdEvent::End(TagEnd::TableCell) => {
-                    if matches!(&ev, MdEvent::End(_)) {
-                        tb.end_cell();
-                    }
-                    continue;
-                }
-                MdEvent::Start(Tag::TableRow) | MdEvent::End(TagEnd::TableRow) => {
-                    if matches!(&ev, MdEvent::End(_)) {
-                        tb.end_row();
-                    }
-                    continue;
-                }
-                MdEvent::Start(Tag::TableHead) | MdEvent::End(TagEnd::TableHead) => {
-                    if matches!(&ev, MdEvent::End(_)) {
-                        tb.end_header();
-                    } else {
-                        tb.in_header = true;
-                    }
-                    continue;
-                }
-                MdEvent::Start(Tag::Strong)
-                | MdEvent::End(TagEnd::Strong)
-                | MdEvent::Start(Tag::Emphasis)
-                | MdEvent::End(TagEnd::Emphasis)
-                | MdEvent::Start(Tag::Link { .. })
-                | MdEvent::End(TagEnd::Link) => {
-                    continue;
-                }
-                MdEvent::End(TagEnd::Table) => {
-                    lines.extend(tb.render(render_width));
-                    table = None;
-                    continue;
-                }
-                _ => continue,
-            }
+        if table.is_some() && handle_table_event(&mut table, &ev, &mut lines, render_width) {
+            continue;
+        }
+        if handle_inline_style_event(
+            &ev,
+            &mut inline,
+            &mut spans,
+            theme_colors,
+        ) {
+            continue;
         }
 
         match ev {
             MdEvent::Start(Tag::Table(aligns)) => {
-                table = Some(TableBuf::new(aligns.clone()));
+                start_table(&mut table, &aligns);
             }
             MdEvent::Start(Tag::Heading { level, .. }) => {
-                in_heading = Some(match level {
-                    HeadingLevel::H1 => 1,
-                    HeadingLevel::H2 => 2,
-                    HeadingLevel::H3 => 3,
-                    _ => 4,
-                });
+                start_heading(&mut in_heading, level);
             }
             MdEvent::End(TagEnd::Heading(_)) => {
-                let lvl = in_heading.unwrap_or(1);
-                let color: Color = match lvl {
-                    1 => theme_colors.heading_1,
-                    2 => theme_colors.heading_2,
-                    3 => theme_colors.heading_3,
-                    _ => theme_colors.heading_other,
-                };
-                let style = Style::default().fg(color).add_modifier(match lvl {
-                    1 => Modifier::BOLD,
-                    2 => Modifier::BOLD,
-                    3 => Modifier::BOLD,
-                    _ => Modifier::empty(),
-                });
-                let title: String = spans.iter().map(|s| s.content.as_ref()).collect();
-                let rendered_title = if lvl == 3 {
-                    format!("{title} ")
-                } else {
-                    title.clone()
-                };
-                toc.push(TocEntry {
-                    level: lvl,
-                    title: title.clone(),
-                    line: lines.len(),
-                });
-                let all = vec![Span::styled(rendered_title, style)];
-                spans.clear();
-                lines.push(Line::from(all));
-                if lvl == 1 {
-                    lines.push(Line::from(Span::styled(
-                        "═".repeat(display_width(&title).min(rule_width(render_width, 0))),
-                        Style::default().fg(theme_colors.heading_underline),
-                    )));
-                }
-                if lvl == 2 {
-                    lines.push(Line::from(Span::styled(
-                        "─".repeat(display_width(&title).min(rule_width(render_width, 0))),
-                        Style::default().fg(theme_colors.heading_underline),
-                    )));
-                }
+                end_heading(
+                    &mut lines,
+                    &mut toc,
+                    &mut spans,
+                    &mut in_heading,
+                    render_width,
+                    theme_colors,
+                );
                 last_block = LastBlock::Other;
-                in_heading = None;
             }
             MdEvent::Start(Tag::Paragraph) => {}
             MdEvent::End(TagEnd::Paragraph) => {
-                if blockquote_depth > 0 && item_stack.is_empty() {
-                    push_wrapped_blockquote_lines(&mut lines, &mut spans, render_width);
-                } else if !item_stack.is_empty() {
-                    let first_prefix =
-                        list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
-                    let continuation_prefix =
-                        list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
-                    push_wrapped_prefixed_lines(
-                        &mut lines,
-                        &mut spans,
-                        first_prefix,
-                        continuation_prefix,
-                        render_width,
-                    );
-                } else {
-                    flush!(block_prefix(false));
-                }
-                lines.push(Line::from(""));
+                end_paragraph(
+                    &mut lines,
+                    &mut spans,
+                    blockquote_depth,
+                    &list_stack,
+                    &mut item_stack,
+                    render_width,
+                );
                 last_block = LastBlock::Paragraph;
             }
             MdEvent::Start(Tag::CodeBlock(kind)) => {
-                if last_block == LastBlock::Paragraph
-                    && item_stack.is_empty()
-                    && lines.last().is_some_and(|line| line_plain_text(line).is_empty())
-                {
-                    lines.pop();
-                }
-                in_code = true;
-                code_buf.clear();
-                code_lang = match kind {
-                    CodeBlockKind::Fenced(l) => l.to_string(),
-                    CodeBlockKind::Indented => String::new(),
-                };
+                start_code_block(
+                    &mut lines,
+                    last_block,
+                    &item_stack,
+                    &mut in_code,
+                    &mut code_buf,
+                    &mut code_lang,
+                    &kind,
+                );
                 last_block = LastBlock::Other;
             }
             MdEvent::End(TagEnd::CodeBlock) => {
                 in_code = false;
-                let ld = if code_lang.is_empty() {
-                    "text".to_string()
-                } else {
-                    code_lang.clone()
-                };
-                let (code_lines, inner_width) =
-                    highlight_code(&code_buf, &code_lang, ss, theme, render_width);
-                let header_width = UnicodeWidthStr::width(ld.as_str()) + 3;
-                let top_bar = "─".repeat(inner_width.saturating_sub(header_width));
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        "┌─ ".to_string(),
-                        Style::default().fg(theme_colors.code_frame),
-                    ),
-                    Span::styled(
-                        format!("{} ", ld),
-                        Style::default().fg(theme_colors.code_label),
-                    ),
-                    Span::styled(
-                        format!("{}┐", top_bar),
-                        Style::default().fg(theme_colors.code_frame),
-                    ),
-                ]));
-                lines.extend(code_lines);
-                lines.push(Line::from(Span::styled(
-                    format!("└{}┘", "─".repeat(inner_width)),
-                    Style::default().fg(theme_colors.code_frame),
-                )));
-                lines.push(Line::from(""));
-                code_lang.clear();
-                code_buf.clear();
+                push_code_block_lines(
+                    &mut lines,
+                    &mut code_buf,
+                    &mut code_lang,
+                    ss,
+                    theme,
+                    render_width,
+                    theme_colors,
+                );
                 last_block = LastBlock::Other;
             }
             MdEvent::Code(text) => {
-                spans.push(Span::styled(
-                    format!(" {} ", text.as_ref()),
-                    Style::default()
-                        .fg(theme_colors.inline_code_fg)
-                        .bg(theme_colors.inline_code_bg),
-                ));
+                push_inline_code_span(&mut spans, text.as_ref(), theme_colors);
             }
             MdEvent::Start(Tag::BlockQuote(_)) => {
                 blockquote_depth += 1;
             }
             MdEvent::End(TagEnd::BlockQuote(_)) => {
-                flush!(vec![Span::styled(
-                    "▏ ",
-                    Style::default().fg(theme_colors.blockquote_marker)
-                )]);
-                blockquote_depth = blockquote_depth.saturating_sub(1);
-                lines.push(Line::from(""));
+                end_blockquote(&mut lines, &mut spans, &mut blockquote_depth, theme_colors);
                 last_block = LastBlock::Other;
             }
             MdEvent::Start(Tag::List(start)) => {
-                if last_block == LastBlock::Paragraph
-                    && item_stack.is_empty()
-                    && lines.last().is_some_and(|line| line_plain_text(line).is_empty())
-                {
-                    lines.pop();
-                }
-                list_stack.push(match start {
-                    Some(n) => ListKind::Ordered(n),
-                    None => ListKind::Unordered,
-                });
+                start_list(&mut lines, last_block, &item_stack, &mut list_stack, start);
                 last_block = LastBlock::Other;
             }
             MdEvent::End(TagEnd::List(_)) => {
-                list_stack.pop();
-                if list_stack.is_empty() {
-                    lines.push(Line::from(""));
-                }
+                end_list(&mut lines, &mut list_stack);
                 last_block = LastBlock::Other;
             }
             MdEvent::Start(Tag::Item) => {
-                item_stack.push(ItemState {
-                    marker_emitted: false,
-                    continuation_indent: 0,
-                });
+                start_item(&mut item_stack);
             }
             MdEvent::End(TagEnd::Item) => {
-                if !spans.is_empty() {
-                    let first_prefix =
-                        list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
-                    let continuation_prefix =
-                        list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
-                    push_wrapped_prefixed_lines(
-                        &mut lines,
-                        &mut spans,
-                        first_prefix,
-                        continuation_prefix,
-                        render_width,
-                    );
-                }
-                item_stack.pop();
-                if let Some(ListKind::Ordered(next)) = list_stack.last_mut() {
-                    *next += 1;
-                }
-            }
-            MdEvent::Rule => {
-                lines.push(Line::from(Span::styled(
-                    "─".repeat(rule_width(render_width, 0)),
-                    Style::default().fg(theme_colors.rule),
-                )));
-                lines.push(Line::from(""));
+                end_item(
+                    &mut lines,
+                    &mut spans,
+                    &mut list_stack,
+                    &mut item_stack,
+                    blockquote_depth,
+                    render_width,
+                );
                 last_block = LastBlock::Other;
             }
-            MdEvent::Start(Tag::Strong) => in_strong = true,
-            MdEvent::End(TagEnd::Strong) => in_strong = false,
-            MdEvent::Start(Tag::Emphasis) => in_em = true,
-            MdEvent::End(TagEnd::Emphasis) => in_em = false,
-            MdEvent::Start(Tag::Strikethrough) => in_strike = true,
-            MdEvent::End(TagEnd::Strikethrough) => in_strike = false,
-            MdEvent::Start(Tag::Link { .. }) => {
-                in_link = true;
-                spans.push(Span::styled(
-                    "⌗",
-                    Style::default().fg(theme_colors.link_icon),
-                ));
+            MdEvent::Rule => {
+                push_rule_line(&mut lines, render_width, theme_colors);
+                last_block = LastBlock::Other;
             }
-            MdEvent::End(TagEnd::Link) => in_link = false,
             MdEvent::Text(text) => {
-                if in_code {
-                    code_buf.push_str(text.as_ref());
-                } else {
-                    let content = text.to_string();
-                    let mut style = if blockquote_depth > 0 {
-                        Style::default()
-                            .fg(theme_colors.blockquote_text)
-                            .add_modifier(Modifier::ITALIC)
-                    } else if in_link {
-                        Style::default().fg(theme_colors.link_text)
-                    } else {
-                        Style::default().fg(theme_colors.text)
-                    };
-                    if in_strong {
-                        style = style
-                            .fg(theme_colors.strong_text)
-                            .add_modifier(Modifier::BOLD);
-                    }
-                    if in_em {
-                        style = style.add_modifier(Modifier::ITALIC);
-                    }
-                    if in_strike {
-                        style = style.add_modifier(Modifier::CROSSED_OUT);
-                    }
-                    spans.push(Span::styled(content, style));
-                }
+                push_text_event(
+                    &mut spans,
+                    &mut code_buf,
+                    text.as_ref(),
+                    in_code,
+                    theme_colors,
+                    blockquote_depth,
+                    inline,
+                );
             }
             MdEvent::SoftBreak | MdEvent::HardBreak => {
-                if !in_code {
-                    if blockquote_depth > 0 && item_stack.is_empty() {
-                        push_wrapped_blockquote_lines(&mut lines, &mut spans, render_width);
-                    } else if !item_stack.is_empty() {
-                        let first_prefix =
-                            list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
-                        let continuation_prefix =
-                            list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
-                        push_wrapped_prefixed_lines(
-                            &mut lines,
-                            &mut spans,
-                            first_prefix,
-                            continuation_prefix,
-                            render_width,
-                        );
-                    } else {
-                        flush!(block_prefix(false));
-                    }
-                }
+                end_line_break(
+                    &mut lines,
+                    &mut spans,
+                    in_code,
+                    blockquote_depth,
+                    &list_stack,
+                    &mut item_stack,
+                    render_width,
+                );
             }
             _ => {}
         }

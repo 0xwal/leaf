@@ -37,68 +37,99 @@ pub(crate) enum FileChange {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StatusCacheKey {
-    pub(crate) pct: u16,
-    pub(crate) search_mode: bool,
-    pub(crate) search_draft_hash: u64,
-    pub(crate) search_query_hash: u64,
-    pub(crate) search_draft_len: usize,
-    pub(crate) search_query_len: usize,
-    pub(crate) search_match_count: usize,
-    pub(crate) search_idx: usize,
-    pub(crate) watch: bool,
-    pub(crate) flash_active: bool,
+    pct: u16,
+    search_mode: bool,
+    search_draft_hash: u64,
+    search_query_hash: u64,
+    search_draft_len: usize,
+    search_query_len: usize,
+    search_match_count: usize,
+    search_idx: usize,
+    watch: bool,
+    flash_active: bool,
 }
 
 #[derive(Clone)]
 pub(crate) struct ThemePreviewCacheEntry {
-    pub(crate) lines: Vec<Line<'static>>,
-    pub(crate) toc: Vec<TocEntry>,
+    lines: Vec<Line<'static>>,
+    toc: Vec<TocEntry>,
+}
+
+pub(crate) struct SearchState {
+    mode: bool,
+    draft: String,
+    query: String,
+    matches: Vec<usize>,
+    idx: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct FilePickerEntry {
-    pub(crate) label: String,
-    pub(crate) path: PathBuf,
-    pub(crate) is_dir: bool,
+    label: String,
+    path: PathBuf,
+    is_dir: bool,
 }
 
-pub(crate) struct App {
-    pub(crate) lines: Vec<Line<'static>>,
-    pub(crate) plain_lines: Vec<String>,
-    pub(crate) folded_plain_lines: Option<Vec<String>>,
-    pub(crate) scroll: usize,
-    pub(crate) toc: Vec<TocEntry>,
-    pub(crate) toc_visible: bool,
-    pub(crate) search_mode: bool,
-    pub(crate) search_draft: String,
-    pub(crate) search_query: String,
-    pub(crate) search_matches: Vec<usize>,
-    pub(crate) search_idx: usize,
-    pub(crate) debug_input: bool,
+impl FilePickerEntry {
+    pub(crate) fn label(&self) -> &str {
+        &self.label
+    }
+
+    pub(crate) fn is_dir(&self) -> bool {
+        self.is_dir
+    }
+}
+
+pub(crate) struct FilePickerState {
+    open: bool,
+    dir: PathBuf,
+    entries: Vec<FilePickerEntry>,
+    index: usize,
+}
+
+pub(crate) struct ThemePickerState {
+    open: bool,
+    index: usize,
+    original: Option<ThemePreset>,
+    preview_cache: Vec<Option<ThemePreviewCacheEntry>>,
+}
+
+pub(crate) struct AppConfig {
     pub(crate) filename: String,
     pub(crate) source: String,
+    pub(crate) debug_input: bool,
     pub(crate) watch: bool,
     pub(crate) filepath: Option<PathBuf>,
     pub(crate) last_file_state: Option<FileState>,
-    pub(crate) last_content_hash: u64,
-    pub(crate) last_hash_check: Option<Instant>,
-    pub(crate) reload_flash: Option<Instant>,
-    pub(crate) highlighted_line_cache: Option<(usize, Line<'static>)>,
-    pub(crate) toc_display_lines: Vec<Line<'static>>,
-    pub(crate) toc_header_line: Line<'static>,
-    pub(crate) toc_active_idx: Option<usize>,
-    pub(crate) status_line: Line<'static>,
-    pub(crate) status_cache_key: Option<StatusCacheKey>,
-    pub(crate) help_open: bool,
-    pub(crate) file_picker_open: bool,
-    pub(crate) file_picker_dir: PathBuf,
-    pub(crate) file_picker_entries: Vec<FilePickerEntry>,
-    pub(crate) file_picker_index: usize,
-    pub(crate) theme_picker_open: bool,
-    pub(crate) theme_picker_index: usize,
-    pub(crate) theme_picker_original: Option<ThemePreset>,
-    pub(crate) theme_preview_cache: Vec<Option<ThemePreviewCacheEntry>>,
-    pub(crate) render_width: usize,
+}
+
+pub(crate) struct App {
+    lines: Vec<Line<'static>>,
+    plain_lines: Vec<String>,
+    folded_plain_lines: Option<Vec<String>>,
+    scroll: usize,
+    toc: Vec<TocEntry>,
+    toc_visible: bool,
+    search: SearchState,
+    debug_input: bool,
+    filename: String,
+    source: String,
+    watch: bool,
+    filepath: Option<PathBuf>,
+    last_file_state: Option<FileState>,
+    last_content_hash: u64,
+    last_hash_check: Option<Instant>,
+    reload_flash: Option<Instant>,
+    highlighted_line_cache: Option<(usize, Line<'static>)>,
+    toc_display_lines: Vec<Line<'static>>,
+    toc_header_line: Line<'static>,
+    toc_active_idx: Option<usize>,
+    status_line: Line<'static>,
+    status_cache_key: Option<StatusCacheKey>,
+    help_open: bool,
+    file_picker: FilePickerState,
+    theme_picker: ThemePickerState,
+    render_width: usize,
 }
 
 impl App {
@@ -153,6 +184,10 @@ impl App {
         Ok(entries)
     }
 
+    fn file_picker_entry_path(entry: &FilePickerEntry) -> PathBuf {
+        entry.path.clone()
+    }
+
     #[cfg(test)]
     pub(crate) fn new(
         lines: Vec<Line<'static>>,
@@ -173,29 +208,29 @@ impl App {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        Self::new_with_source(
-            lines,
-            toc,
+        Self::new_with_source(lines, toc, AppConfig {
             filename,
             source,
             debug_input,
             watch,
             filepath,
             last_file_state,
-        )
+        })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_with_source(
         lines: Vec<Line<'static>>,
         toc: Vec<TocEntry>,
-        filename: String,
-        source: String,
-        debug_input: bool,
-        watch: bool,
-        filepath: Option<PathBuf>,
-        last_file_state: Option<FileState>,
+        config: AppConfig,
     ) -> Self {
+        let AppConfig {
+            filename,
+            source,
+            debug_input,
+            watch,
+            filepath,
+            last_file_state,
+        } = config;
         let plain_lines = build_plain_lines(&lines);
         let mut app = Self {
             lines,
@@ -204,11 +239,13 @@ impl App {
             scroll: 0,
             toc,
             toc_visible: false,
-            search_mode: false,
-            search_draft: String::new(),
-            search_query: String::new(),
-            search_matches: vec![],
-            search_idx: 0,
+            search: SearchState {
+                mode: false,
+                draft: String::new(),
+                query: String::new(),
+                matches: vec![],
+                idx: 0,
+            },
             debug_input,
             filename,
             source,
@@ -225,14 +262,18 @@ impl App {
             status_line: Line::default(),
             status_cache_key: None,
             help_open: false,
-            file_picker_open: false,
-            file_picker_dir: PathBuf::from("."),
-            file_picker_entries: Vec::new(),
-            file_picker_index: 0,
-            theme_picker_open: false,
-            theme_picker_index: theme_preset_index(current_theme_preset()),
-            theme_picker_original: None,
-            theme_preview_cache: vec![None; crate::theme::THEME_PRESETS.len()],
+            file_picker: FilePickerState {
+                open: false,
+                dir: PathBuf::from("."),
+                entries: Vec::new(),
+                index: 0,
+            },
+            theme_picker: ThemePickerState {
+                open: false,
+                index: theme_preset_index(current_theme_preset()),
+                original: None,
+                preview_cache: vec![None; crate::theme::THEME_PRESETS.len()],
+            },
             render_width: 80,
         };
         app.store_current_theme_preview();
@@ -244,8 +285,52 @@ impl App {
         self.last_content_hash = last_content_hash;
     }
 
+    pub(crate) fn is_watch_enabled(&self) -> bool {
+        self.watch
+    }
+
+    pub(crate) fn debug_input_enabled(&self) -> bool {
+        self.debug_input
+    }
+
+    pub(crate) fn is_toc_visible(&self) -> bool {
+        self.toc_visible
+    }
+
+    pub(crate) fn has_toc(&self) -> bool {
+        !self.toc.is_empty()
+    }
+
     pub(crate) fn total(&self) -> usize {
         self.lines.len()
+    }
+
+    pub(crate) fn scroll(&self) -> usize {
+        self.scroll
+    }
+
+    pub(crate) fn visible_lines(&self, start: usize, end: usize) -> &[Line<'static>] {
+        &self.lines[start..end]
+    }
+
+    pub(crate) fn highlighted_line_cache(&self) -> Option<&(usize, Line<'static>)> {
+        self.highlighted_line_cache.as_ref()
+    }
+
+    pub(crate) fn toc_display_lines(&self) -> &[Line<'static>] {
+        &self.toc_display_lines
+    }
+
+    pub(crate) fn toc_header_line(&self) -> &Line<'static> {
+        &self.toc_header_line
+    }
+
+    pub(crate) fn status_line(&self) -> &Line<'static> {
+        &self.status_line
+    }
+
+    pub(crate) fn filename(&self) -> &str {
+        &self.filename
     }
 
     pub(crate) fn replace_content(&mut self, lines: Vec<Line<'static>>, toc: Vec<TocEntry>) {
@@ -259,11 +344,59 @@ impl App {
     }
 
     pub(crate) fn active_highlight_line(&self) -> Option<usize> {
-        if self.search_matches.is_empty() {
+        if self.search.matches.is_empty() {
             None
         } else {
-            Some(self.search_matches[self.search_idx])
+            Some(self.search.matches[self.search.idx])
         }
+    }
+
+    pub(crate) fn is_search_mode(&self) -> bool {
+        self.search.mode
+    }
+
+    pub(crate) fn search_draft(&self) -> &str {
+        &self.search.draft
+    }
+
+    pub(crate) fn search_query(&self) -> &str {
+        &self.search.query
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_search_query(&mut self, query: impl Into<String>) {
+        self.search.query = query.into();
+    }
+
+    pub(crate) fn search_match_count(&self) -> usize {
+        self.search.matches.len()
+    }
+
+    pub(crate) fn search_index(&self) -> usize {
+        self.search.idx
+    }
+
+    #[cfg(test)]
+    pub(crate) fn search_matches(&self) -> &[usize] {
+        &self.search.matches
+    }
+
+    #[cfg(test)]
+    pub(crate) fn line(&self, idx: usize) -> Option<&Line<'static>> {
+        self.lines.get(idx)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_search_draft(&mut self, draft: impl Into<String>) {
+        self.search.draft = draft.into();
+    }
+
+    pub(crate) fn pop_search_draft(&mut self) {
+        self.search.draft.pop();
+    }
+
+    pub(crate) fn push_search_draft(&mut self, ch: char) {
+        self.search.draft.push(ch);
     }
 
     pub(crate) fn active_toc_index(&self) -> Option<usize> {
@@ -352,13 +485,13 @@ impl App {
     pub(crate) fn refresh_status_cache(&mut self, pct: u16) {
         let cache_key = StatusCacheKey {
             pct,
-            search_mode: self.search_mode,
-            search_draft_hash: hash_str(&self.search_draft),
-            search_query_hash: hash_str(&self.search_query),
-            search_draft_len: self.search_draft.len(),
-            search_query_len: self.search_query.len(),
-            search_match_count: self.search_matches.len(),
-            search_idx: self.search_idx,
+            search_mode: self.search.mode,
+            search_draft_hash: hash_str(&self.search.draft),
+            search_query_hash: hash_str(&self.search.query),
+            search_draft_len: self.search.draft.len(),
+            search_query_len: self.search.query.len(),
+            search_match_count: self.search.matches.len(),
+            search_idx: self.search.idx,
             watch: self.watch,
             flash_active: self
                 .reload_flash
@@ -382,7 +515,7 @@ impl App {
     }
 
     pub(crate) fn invalidate_theme_preview_cache(&mut self) {
-        self.theme_preview_cache.fill(None);
+        self.theme_picker.preview_cache.fill(None);
     }
 
     fn store_theme_preview(
@@ -392,7 +525,7 @@ impl App {
         toc: &[TocEntry],
     ) {
         let idx = theme_preset_index(preset);
-        if let Some(slot) = self.theme_preview_cache.get_mut(idx) {
+        if let Some(slot) = self.theme_picker.preview_cache.get_mut(idx) {
             *slot = Some(ThemePreviewCacheEntry {
                 lines: lines.to_vec(),
                 toc: toc.to_vec(),
@@ -408,20 +541,20 @@ impl App {
     }
 
     pub(crate) fn open_theme_picker(&mut self) {
-        self.theme_picker_open = true;
+        self.theme_picker.open = true;
         let current = current_theme_preset();
-        self.theme_picker_index = theme_preset_index(current);
-        self.theme_picker_original = Some(current);
+        self.theme_picker.index = theme_preset_index(current);
+        self.theme_picker.original = Some(current);
         self.store_current_theme_preview();
     }
 
     pub(crate) fn close_theme_picker(&mut self) {
-        self.theme_picker_open = false;
-        self.theme_picker_original = None;
+        self.theme_picker.open = false;
+        self.theme_picker.original = None;
     }
 
     pub(crate) fn is_theme_picker_open(&self) -> bool {
-        self.theme_picker_open
+        self.theme_picker.open
     }
 
     pub(crate) fn open_help(&mut self) {
@@ -439,10 +572,10 @@ impl App {
     pub(crate) fn open_file_picker(&mut self, dir: PathBuf) -> bool {
         match Self::build_file_picker_entries(&dir) {
             Ok(entries) => {
-                self.file_picker_open = true;
-                self.file_picker_dir = dir;
-                self.file_picker_entries = entries;
-                self.file_picker_index = 0;
+                self.file_picker.open = true;
+                self.file_picker.dir = dir;
+                self.file_picker.entries = entries;
+                self.file_picker.index = 0;
                 true
             }
             Err(_) => false,
@@ -450,42 +583,71 @@ impl App {
     }
 
     pub(crate) fn is_file_picker_open(&self) -> bool {
-        self.file_picker_open
+        self.file_picker.open
+    }
+
+    pub(crate) fn file_picker_dir(&self) -> &std::path::Path {
+        &self.file_picker.dir
+    }
+
+    pub(crate) fn file_picker_entries(&self) -> &[FilePickerEntry] {
+        &self.file_picker.entries
+    }
+
+    pub(crate) fn file_picker_index(&self) -> usize {
+        self.file_picker.index
     }
 
     pub(crate) fn move_file_picker_up(&mut self) {
-        let total = self.file_picker_entries.len();
+        let total = self.file_picker.entries.len();
         if total == 0 {
             return;
         }
-        if self.file_picker_index == 0 {
-            self.file_picker_index = total - 1;
+        if self.file_picker.index == 0 {
+            self.file_picker.index = total - 1;
         } else {
-            self.file_picker_index -= 1;
+            self.file_picker.index -= 1;
         }
     }
 
     pub(crate) fn move_file_picker_down(&mut self) {
-        let total = self.file_picker_entries.len();
+        let total = self.file_picker.entries.len();
         if total == 0 {
             return;
         }
-        self.file_picker_index = (self.file_picker_index + 1) % total;
+        self.file_picker.index = (self.file_picker.index + 1) % total;
     }
 
     pub(crate) fn open_file_picker_parent(&mut self) -> bool {
-        let Some(parent) = self.file_picker_dir.parent() else {
+        let Some(parent) = self.file_picker.dir.parent() else {
             return false;
         };
         self.open_file_picker(parent.to_path_buf())
     }
 
     pub(crate) fn theme_picker_index(&self) -> usize {
-        self.theme_picker_index
+        self.theme_picker.index
+    }
+
+    #[cfg(test)]
+    pub(crate) fn theme_picker_original(&self) -> Option<ThemePreset> {
+        self.theme_picker.original
+    }
+
+    pub(crate) fn clear_reload_flash(&mut self) {
+        self.reload_flash = None;
+    }
+
+    pub(crate) fn reload_flash_started(&self) -> Option<Instant> {
+        self.reload_flash
+    }
+
+    pub(crate) fn set_last_file_state(&mut self, state: FileState) {
+        self.last_file_state = Some(state);
     }
 
     pub(crate) fn theme_picker_reference_preset(&self) -> ThemePreset {
-        self.theme_picker_original.unwrap_or(current_theme_preset())
+        self.theme_picker.original.unwrap_or(current_theme_preset())
     }
 
     pub(crate) fn move_theme_picker_up(&mut self) {
@@ -493,10 +655,10 @@ impl App {
         if total == 0 {
             return;
         }
-        if self.theme_picker_index == 0 {
-            self.theme_picker_index = total - 1;
+        if self.theme_picker.index == 0 {
+            self.theme_picker.index = total - 1;
         } else {
-            self.theme_picker_index -= 1;
+            self.theme_picker.index -= 1;
         }
     }
 
@@ -505,12 +667,12 @@ impl App {
         if total == 0 {
             return;
         }
-        self.theme_picker_index = (self.theme_picker_index + 1) % total;
+        self.theme_picker.index = (self.theme_picker.index + 1) % total;
     }
 
     pub(crate) fn set_theme_picker_index(&mut self, idx: usize) -> bool {
         if idx < THEME_PRESETS.len() {
-            self.theme_picker_index = idx;
+            self.theme_picker.index = idx;
             true
         } else {
             false
@@ -518,7 +680,16 @@ impl App {
     }
 
     pub(crate) fn selected_theme_preset(&self) -> Option<ThemePreset> {
-        THEME_PRESETS.get(self.theme_picker_index).copied()
+        THEME_PRESETS.get(self.theme_picker.index).copied()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_cached_theme_preview(&self, preset: ThemePreset) -> bool {
+        self.theme_picker
+            .preview_cache
+            .get(theme_preset_index(preset))
+            .and_then(|entry| entry.as_ref())
+            .is_some()
     }
 
     pub(crate) fn preview_theme_preset(
@@ -532,7 +703,8 @@ impl App {
         }
         set_theme_preset(preset);
         let cached = self
-            .theme_preview_cache
+            .theme_picker
+            .preview_cache
             .get(theme_preset_index(preset))
             .and_then(|entry| entry.as_ref())
             .cloned();
@@ -549,7 +721,7 @@ impl App {
     }
 
     pub(crate) fn restore_theme_picker_preview(&mut self, ss: &SyntaxSet, themes: &ThemeSet) {
-        if let Some(original) = self.theme_picker_original {
+        if let Some(original) = self.theme_picker.original {
             self.preview_theme_preset(original, ss, themes);
         }
         self.close_theme_picker();
@@ -563,6 +735,23 @@ impl App {
         self.scroll = self.scroll.saturating_sub(n);
     }
 
+    pub(crate) fn scroll_top(&mut self) {
+        self.scroll = 0;
+    }
+
+    pub(crate) fn scroll_bottom(&mut self) {
+        self.scroll = self.total().saturating_sub(1);
+    }
+
+    pub(crate) fn toggle_toc(&mut self) {
+        self.toc_visible = !self.toc_visible;
+    }
+
+    pub(crate) fn request_reload(&mut self, ss: &SyntaxSet, themes: &ThemeSet) -> bool {
+        self.last_file_state = None;
+        self.reload(ss, themes)
+    }
+
     pub(crate) fn jump_to_toc(&mut self, idx: usize) {
         if let Some(e) = self.toc.get(idx) {
             self.scroll = e.line;
@@ -570,7 +759,7 @@ impl App {
     }
 
     pub(crate) fn run_search(&mut self) {
-        let q = self.search_query.to_lowercase();
+        let q = self.search.query.to_lowercase();
         if q.is_empty() {
             return;
         }
@@ -583,46 +772,46 @@ impl App {
                 .map(|(i, _)| i)
                 .collect()
         };
-        self.search_matches = search_matches;
-        self.search_idx = 0;
-        if let Some(&f) = self.search_matches.first() {
+        self.search.matches = search_matches;
+        self.search.idx = 0;
+        if let Some(&f) = self.search.matches.first() {
             self.scroll = f;
         }
     }
 
     pub(crate) fn begin_search(&mut self) {
-        self.search_mode = true;
-        self.search_draft = self.search_query.clone();
+        self.search.mode = true;
+        self.search.draft = self.search.query.clone();
         crate::runtime::debug_log(
             self.debug_input,
             &format!(
                 "begin_search query={:?} draft={:?} matches={} idx={}",
-                self.search_query,
-                self.search_draft,
-                self.search_matches.len(),
-                self.search_idx
+                self.search.query,
+                self.search.draft,
+                self.search.matches.len(),
+                self.search.idx
             ),
         );
     }
 
     pub(crate) fn reset_search_state(&mut self) {
-        self.search_draft.clear();
-        self.search_query.clear();
-        self.search_matches.clear();
-        self.search_idx = 0;
+        self.search.draft.clear();
+        self.search.query.clear();
+        self.search.matches.clear();
+        self.search.idx = 0;
     }
 
     pub(crate) fn cancel_search(&mut self) {
-        self.search_mode = false;
+        self.search.mode = false;
         self.reset_search_state();
         crate::runtime::debug_log(self.debug_input, "cancel_search cleared query and matches");
     }
 
     pub(crate) fn confirm_search(&mut self) {
-        self.search_mode = false;
-        let draft = std::mem::take(&mut self.search_draft);
-        self.search_query = draft;
-        if self.search_query.is_empty() {
+        self.search.mode = false;
+        let draft = std::mem::take(&mut self.search.draft);
+        self.search.query = draft;
+        if self.search.query.is_empty() {
             self.reset_search_state();
             crate::runtime::debug_log(
                 self.debug_input,
@@ -635,16 +824,16 @@ impl App {
             self.debug_input,
             &format!(
                 "confirm_search query={:?} matches={} idx={} scroll={}",
-                self.search_query,
-                self.search_matches.len(),
-                self.search_idx,
+                self.search.query,
+                self.search.matches.len(),
+                self.search.idx,
                 self.scroll
             ),
         );
     }
 
     pub(crate) fn clear_active_search(&mut self) {
-        self.search_mode = false;
+        self.search.mode = false;
         self.reset_search_state();
         crate::runtime::debug_log(
             self.debug_input,
@@ -653,27 +842,27 @@ impl App {
     }
 
     pub(crate) fn has_active_search(&self) -> bool {
-        !self.search_query.is_empty() || !self.search_matches.is_empty()
+        !self.search.query.is_empty() || !self.search.matches.is_empty()
     }
 
     pub(crate) fn next_match(&mut self) {
-        if self.search_matches.is_empty() {
+        if self.search.matches.is_empty() {
             return;
         }
-        self.search_idx = (self.search_idx + 1) % self.search_matches.len();
-        self.scroll = self.search_matches[self.search_idx];
+        self.search.idx = (self.search.idx + 1) % self.search.matches.len();
+        self.scroll = self.search.matches[self.search.idx];
     }
 
     pub(crate) fn prev_match(&mut self) {
-        if self.search_matches.is_empty() {
+        if self.search.matches.is_empty() {
             return;
         }
-        if self.search_idx == 0 {
-            self.search_idx = self.search_matches.len() - 1;
+        if self.search.idx == 0 {
+            self.search.idx = self.search.matches.len() - 1;
         } else {
-            self.search_idx -= 1;
+            self.search.idx -= 1;
         }
-        self.scroll = self.search_matches[self.search_idx];
+        self.scroll = self.search.matches[self.search.idx];
     }
 
     pub(crate) fn scroll_percent(&self, vh: usize) -> u16 {
@@ -738,7 +927,7 @@ impl App {
         self.invalidate_theme_preview_cache();
         self.store_theme_preview(current_theme_preset(), &new_lines, &new_toc);
         self.replace_content(new_lines, new_toc);
-        if !self.search_query.is_empty() && !self.search_mode {
+        if !self.search.query.is_empty() && !self.search.mode {
             self.run_search();
         }
     }
@@ -766,9 +955,9 @@ impl App {
         self.reload_flash = None;
         self.scroll = 0;
         self.help_open = false;
-        self.file_picker_open = false;
-        self.theme_picker_open = false;
-        self.search_mode = false;
+        self.file_picker.open = false;
+        self.theme_picker.open = false;
+        self.search.mode = false;
         self.reset_search_state();
         self.invalidate_theme_preview_cache();
         self.store_theme_preview(current_theme_preset(), &lines, &toc);
@@ -781,13 +970,13 @@ impl App {
         ss: &SyntaxSet,
         themes: &ThemeSet,
     ) -> bool {
-        let Some(entry) = self.file_picker_entries.get(self.file_picker_index).cloned() else {
+        let Some(entry) = self.file_picker.entries.get(self.file_picker.index).cloned() else {
             return false;
         };
-        if entry.is_dir {
-            self.open_file_picker(entry.path)
+        if entry.is_dir() {
+            self.open_file_picker(Self::file_picker_entry_path(&entry))
         } else {
-            self.load_path(entry.path, ss, themes)
+            self.load_path(Self::file_picker_entry_path(&entry), ss, themes)
         }
     }
 
