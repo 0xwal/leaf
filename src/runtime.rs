@@ -5,7 +5,12 @@ use crate::{
 use anyhow::Result;
 use crossterm::event::{self, poll, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{fs::OpenOptions, io, io::Write, time::Duration};
+use std::{
+    fs::OpenOptions,
+    io,
+    io::Write,
+    time::{Duration, Instant},
+};
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 pub(crate) fn should_handle_key(kind: KeyEventKind) -> bool {
@@ -34,7 +39,9 @@ pub(crate) fn run(
     const WATCH_INTERVAL: Duration = Duration::from_millis(250);
     const FLASH_DURATION: Duration = Duration::from_millis(1500);
     const MOUSE_SCROLL_STEP: usize = 3;
+    const RESIZE_DEBOUNCE: Duration = Duration::from_millis(120);
     let mut needs_redraw = true;
+    let mut pending_resize: Option<Instant> = None;
     sync_render_width(terminal, app, ss, themes)?;
 
     loop {
@@ -43,19 +50,29 @@ pub(crate) fn run(
             needs_redraw = false;
         }
 
-        let poll_timeout = if app.is_watch_enabled() {
-            let flash_timeout = app.reload_flash_started().and_then(|started| {
-                let elapsed = started.elapsed();
-                (elapsed < FLASH_DURATION).then_some(FLASH_DURATION - elapsed)
-            });
-            flash_timeout
-                .map(|remaining| remaining.min(WATCH_INTERVAL))
-                .unwrap_or(WATCH_INTERVAL)
+        let flash_timeout = app.reload_flash_started().and_then(|started| {
+            let elapsed = started.elapsed();
+            (elapsed < FLASH_DURATION).then_some(FLASH_DURATION - elapsed)
+        });
+        let resize_timeout = pending_resize.and_then(|started| {
+            let elapsed = started.elapsed();
+            (elapsed < RESIZE_DEBOUNCE).then_some(RESIZE_DEBOUNCE - elapsed)
+        });
+        let poll_timeout = [if app.is_watch_enabled() {
+            Some(WATCH_INTERVAL)
         } else {
-            Duration::MAX
-        };
+            None
+        }, flash_timeout, resize_timeout]
+        .into_iter()
+        .flatten()
+        .min()
+        .unwrap_or(Duration::MAX);
 
-        let event_available = if app.is_watch_enabled() { poll(poll_timeout)? } else { true };
+        let event_available = if poll_timeout == Duration::MAX {
+            true
+        } else {
+            poll(poll_timeout)?
+        };
 
         if event_available {
             match event::read()? {
@@ -209,10 +226,19 @@ pub(crate) fn run(
                     }
                 }
                 Event::Resize(_, _) => {
-                    let _ = sync_render_width(terminal, app, ss, themes)?;
-                    needs_redraw = true;
+                    pending_resize = Some(Instant::now());
                 }
                 _ => {}
+            }
+        }
+
+        if pending_resize
+            .map(|started| started.elapsed() >= RESIZE_DEBOUNCE)
+            .unwrap_or(false)
+        {
+            pending_resize = None;
+            if sync_render_width(terminal, app, ss, themes)? {
+                needs_redraw = true;
             }
         }
 
