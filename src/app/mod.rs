@@ -20,6 +20,9 @@ use std::{
 };
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
+pub(super) mod search;
+pub(crate) use search::SearchState;
+
 const MAX_FUZZY_PICKER_DIRS_VISITED: usize = 5_000;
 const MAX_FUZZY_PICKER_FILES_INDEXED: usize = 10_000;
 const MAX_FUZZY_PICKER_INDEX_DURATION: Duration = Duration::from_secs(5);
@@ -67,14 +70,6 @@ pub(crate) struct StatusCacheKey {
 pub(crate) struct ThemePreviewCacheEntry {
     lines: Vec<Line<'static>>,
     toc: Vec<TocEntry>,
-}
-
-pub(crate) struct SearchState {
-    mode: bool,
-    draft: String,
-    query: String,
-    matches: Vec<usize>,
-    idx: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -210,13 +205,13 @@ pub(crate) struct AppConfig {
 
 pub(crate) struct App {
     lines: Vec<Line<'static>>,
-    plain_lines: Vec<String>,
-    folded_plain_lines: Option<Vec<String>>,
-    scroll: usize,
+    pub(super) plain_lines: Vec<String>,
+    pub(super) folded_plain_lines: Option<Vec<String>>,
+    pub(super) scroll: usize,
     toc: Vec<TocEntry>,
     toc_visible: bool,
-    search: SearchState,
-    debug_input: bool,
+    pub(super) search: SearchState,
+    pub(super) debug_input: bool,
     filename: String,
     source: String,
     watch: bool,
@@ -717,60 +712,9 @@ impl App {
         self.refresh_static_caches();
     }
 
-    pub(crate) fn active_highlight_line(&self) -> Option<usize> {
-        if self.search.matches.is_empty() {
-            None
-        } else {
-            Some(self.search.matches[self.search.idx])
-        }
-    }
-
-    pub(crate) fn is_search_mode(&self) -> bool {
-        self.search.mode
-    }
-
-    pub(crate) fn search_draft(&self) -> &str {
-        &self.search.draft
-    }
-
-    pub(crate) fn search_query(&self) -> &str {
-        &self.search.query
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_search_query(&mut self, query: impl Into<String>) {
-        self.search.query = query.into();
-    }
-
-    pub(crate) fn search_match_count(&self) -> usize {
-        self.search.matches.len()
-    }
-
-    pub(crate) fn search_index(&self) -> usize {
-        self.search.idx
-    }
-
-    #[cfg(test)]
-    pub(crate) fn search_matches(&self) -> &[usize] {
-        &self.search.matches
-    }
-
     #[cfg(test)]
     pub(crate) fn line(&self, idx: usize) -> Option<&Line<'static>> {
         self.lines.get(idx)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_search_draft(&mut self, draft: impl Into<String>) {
-        self.search.draft = draft.into();
-    }
-
-    pub(crate) fn pop_search_draft(&mut self) {
-        self.search.draft.pop();
-    }
-
-    pub(crate) fn push_search_draft(&mut self, ch: char) {
-        self.search.draft.push(ch);
     }
 
     pub(crate) fn active_toc_index(&self) -> Option<usize> {
@@ -798,18 +742,6 @@ impl App {
         } else {
             active.or(Some(first_idx))
         }
-    }
-
-    pub(crate) fn folded_plain_lines(&mut self) -> &[String] {
-        if self.folded_plain_lines.is_none() {
-            self.folded_plain_lines = Some(
-                self.plain_lines
-                    .iter()
-                    .map(|line| line.to_lowercase())
-                    .collect(),
-            );
-        }
-        self.folded_plain_lines.as_deref().unwrap_or(&[])
     }
 
     pub(crate) fn refresh_highlighted_line_cache(&mut self, line_idx: usize) -> Option<()> {
@@ -1424,113 +1356,6 @@ impl App {
         if let Some(e) = self.toc.get(idx) {
             self.scroll = e.line;
         }
-    }
-
-    pub(crate) fn run_search(&mut self) {
-        let q = self.search.query.to_lowercase();
-        if q.is_empty() {
-            return;
-        }
-        let search_matches = {
-            let folded_lines = self.folded_plain_lines();
-            folded_lines
-                .iter()
-                .enumerate()
-                .filter(|(_, line)| line.contains(&q))
-                .map(|(i, _)| i)
-                .collect()
-        };
-        self.search.matches = search_matches;
-        self.search.idx = 0;
-        if let Some(&f) = self.search.matches.first() {
-            self.scroll = f;
-        }
-    }
-
-    pub(crate) fn begin_search(&mut self) {
-        self.search.mode = true;
-        self.search.draft = self.search.query.clone();
-        crate::runtime::debug_log(
-            self.debug_input,
-            &format!(
-                "begin_search query={:?} draft={:?} matches={} idx={}",
-                self.search.query,
-                self.search.draft,
-                self.search.matches.len(),
-                self.search.idx
-            ),
-        );
-    }
-
-    pub(crate) fn reset_search_state(&mut self) {
-        self.search.draft.clear();
-        self.search.query.clear();
-        self.search.matches.clear();
-        self.search.idx = 0;
-    }
-
-    pub(crate) fn cancel_search(&mut self) {
-        self.search.mode = false;
-        self.reset_search_state();
-        crate::runtime::debug_log(self.debug_input, "cancel_search cleared query and matches");
-    }
-
-    pub(crate) fn confirm_search(&mut self) {
-        self.search.mode = false;
-        let draft = std::mem::take(&mut self.search.draft);
-        self.search.query = draft;
-        if self.search.query.is_empty() {
-            self.reset_search_state();
-            crate::runtime::debug_log(
-                self.debug_input,
-                "confirm_search empty query -> cleared matches",
-            );
-            return;
-        }
-        self.run_search();
-        crate::runtime::debug_log(
-            self.debug_input,
-            &format!(
-                "confirm_search query={:?} matches={} idx={} scroll={}",
-                self.search.query,
-                self.search.matches.len(),
-                self.search.idx,
-                self.scroll
-            ),
-        );
-    }
-
-    pub(crate) fn clear_active_search(&mut self) {
-        self.search.mode = false;
-        self.reset_search_state();
-        crate::runtime::debug_log(
-            self.debug_input,
-            "clear_active_search cleared query and matches",
-        );
-    }
-
-    pub(crate) fn has_active_search(&self) -> bool {
-        !self.search.query.is_empty() || !self.search.matches.is_empty()
-    }
-
-    pub(crate) fn next_match(&mut self) {
-        if self.search.matches.is_empty() {
-            return;
-        }
-        self.search.idx = (self.search.idx + 1) % self.search.matches.len();
-        self.scroll = self.search.matches[self.search.idx];
-    }
-
-    pub(crate) fn prev_match(&mut self) {
-        if self.search.matches.is_empty() {
-            return;
-        }
-        if self.search.idx == 0 {
-            self.search.idx = self.search.matches.len() - 1;
-        } else {
-            self.search.idx -= 1;
-        }
-        self.scroll = self.search.matches[self.search.idx];
     }
 
     pub(crate) fn scroll_percent(&self, vh: usize) -> u16 {
