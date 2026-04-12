@@ -1,4 +1,5 @@
 use super::App;
+use crate::markdown::hash_str;
 
 pub(crate) struct SearchState {
     pub(super) mode: bool,
@@ -6,6 +7,8 @@ pub(crate) struct SearchState {
     pub(super) query: String,
     pub(super) matches: Vec<usize>,
     pub(super) idx: usize,
+    pub(super) draft_hash: u64,
+    pub(super) query_hash: u64,
 }
 
 impl App {
@@ -32,6 +35,7 @@ impl App {
     #[cfg(test)]
     pub(crate) fn set_search_query(&mut self, query: impl Into<String>) {
         self.search.query = query.into();
+        self.search.query_hash = hash_str(&self.search.query);
     }
 
     pub(crate) fn search_match_count(&self) -> usize {
@@ -50,14 +54,17 @@ impl App {
     #[cfg(test)]
     pub(crate) fn set_search_draft(&mut self, draft: impl Into<String>) {
         self.search.draft = draft.into();
+        self.search.draft_hash = hash_str(&self.search.draft);
     }
 
     pub(crate) fn pop_search_draft(&mut self) {
         self.search.draft.pop();
+        self.search.draft_hash = hash_str(&self.search.draft);
     }
 
     pub(crate) fn push_search_draft(&mut self, ch: char) {
         self.search.draft.push(ch);
+        self.search.draft_hash = hash_str(&self.search.draft);
     }
 
     pub(crate) fn run_search(&mut self) {
@@ -83,6 +90,7 @@ impl App {
     pub(crate) fn begin_search(&mut self) {
         self.search.mode = true;
         self.search.draft = self.search.query.clone();
+        self.search.draft_hash = self.search.query_hash;
         crate::runtime::debug_log(
             self.debug_input,
             &format!(
@@ -100,6 +108,8 @@ impl App {
         self.search.query.clear();
         self.search.matches.clear();
         self.search.idx = 0;
+        self.search.draft_hash = 0;
+        self.search.query_hash = 0;
     }
 
     pub(crate) fn cancel_search(&mut self) {
@@ -112,6 +122,8 @@ impl App {
         self.search.mode = false;
         let draft = std::mem::take(&mut self.search.draft);
         self.search.query = draft;
+        self.search.query_hash = self.search.draft_hash;
+        self.search.draft_hash = 0;
         if self.search.query.is_empty() {
             self.reset_search_state();
             crate::runtime::debug_log(
