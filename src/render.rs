@@ -866,7 +866,7 @@ pub(crate) fn toc_header_line() -> Line<'static> {
 }
 
 pub(crate) fn build_toc_line_with_index(
-    entry: &crate::app::TocEntry,
+    entry: &crate::markdown::toc::TocEntry,
     display_level: u8,
     top_level_index: Option<usize>,
     active: bool,

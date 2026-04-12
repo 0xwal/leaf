@@ -1,7 +1,6 @@
-use crate::{
-    app::{normalize_toc, TocEntry},
-    theme::{app_theme, MarkdownTheme},
-};
+pub(crate) mod toc;
+
+use crate::theme::{app_theme, MarkdownTheme};
 use pulldown_cmark::{
     Alignment, CodeBlockKind, Event as MdEvent, HeadingLevel, Options, Parser, Tag, TagEnd,
 };
@@ -17,6 +16,7 @@ use std::{
 use syntect::{
     easy::HighlightLines, highlighting::Theme, parsing::SyntaxSet, util::LinesWithEndings,
 };
+use toc::{normalize_toc, TocEntry};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 const TAB_STOP: usize = 4;
