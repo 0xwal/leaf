@@ -188,6 +188,8 @@ fn main() -> Result<()> {
     );
 
     let mut stdout = io::stdout();
+    print!("\x1b]0;leaf\x07");
+    let _ = io::stdout().flush();
     runtime::debug_log(debug_input, "terminal enter start");
     let mut session = TerminalSession::enter(&mut stdout)?;
     runtime::debug_log(debug_input, "terminal enter done");

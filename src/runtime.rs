@@ -241,6 +241,14 @@ pub(crate) fn run(
                                 app.preview_theme_preset(preset, ss, themes);
                             }
                         }
+                    } else if app.is_editor_picker_open() {
+                        match key.code {
+                            KeyCode::Esc => app.cancel_editor_picker(),
+                            KeyCode::Enter => app.close_editor_picker(),
+                            KeyCode::Char('j') | KeyCode::Down => app.move_editor_picker_down(),
+                            KeyCode::Char('k') | KeyCode::Up => app.move_editor_picker_up(),
+                            _ => state_changed = false,
+                        }
                     } else if app.is_search_mode() {
                         match key.code {
                             KeyCode::Esc => app.cancel_search(),
@@ -273,6 +281,9 @@ pub(crate) fn run(
                             KeyCode::Char('t') => app.toggle_toc(),
                             KeyCode::Char('T') => {
                                 app.open_theme_picker();
+                            }
+                            KeyCode::Char('E') => {
+                                app.open_editor_picker();
                             }
                             KeyCode::Char('?') => {
                                 app.open_help();

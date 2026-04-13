@@ -30,6 +30,64 @@ pub(crate) fn split_editor_cmd(cmd: &str) -> (&str, Vec<&str>) {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct EditorEntry {
+    pub(crate) name: String,
+    pub(crate) kind: EditorKind,
+}
+
+const KNOWN_EDITORS: &[(&str, EditorKind)] = &[
+    ("nano", EditorKind::Terminal),
+    ("vim", EditorKind::Terminal),
+    ("vi", EditorKind::Terminal),
+    ("nvim", EditorKind::Terminal),
+    ("micro", EditorKind::Terminal),
+    ("helix", EditorKind::Terminal),
+    ("emacs", EditorKind::Terminal),
+    ("code", EditorKind::Gui),
+    ("codium", EditorKind::Gui),
+    ("subl", EditorKind::Gui),
+    ("gedit", EditorKind::Gui),
+    ("kate", EditorKind::Gui),
+    ("mousepad", EditorKind::Gui),
+    ("zed", EditorKind::Gui),
+    ("notepad++", EditorKind::Gui),
+];
+
+pub(crate) fn scan_available_editors() -> Vec<EditorEntry> {
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    let separator = if cfg!(target_os = "windows") {
+        ';'
+    } else {
+        ':'
+    };
+    let dirs: Vec<&str> = path_var.split(separator).collect();
+    let mut found = Vec::new();
+
+    for &(name, kind) in KNOWN_EDITORS {
+        let bin_name = if cfg!(target_os = "windows") && !name.contains('.') {
+            format!("{name}.exe")
+        } else {
+            name.to_string()
+        };
+        let exists = dirs
+            .iter()
+            .any(|dir| Path::new(dir).join(&bin_name).is_file());
+        if exists {
+            found.push(EditorEntry {
+                name: name.to_string(),
+                kind,
+            });
+        }
+    }
+
+    found.sort_by_key(|e| match e.kind {
+        EditorKind::Terminal => 0,
+        EditorKind::Gui => 1,
+    });
+    found
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TerminalEmulator {
     Kitty,
     GnomeTerminal,
@@ -106,7 +164,11 @@ pub(crate) fn try_new_tab_command(
     match emulator {
         TerminalEmulator::Kitty => {
             let mut cmd = Command::new("kitty");
-            cmd.arg("@").arg("launch").arg("--type=tab").arg(bin);
+            cmd.arg("@")
+                .arg("launch")
+                .arg("--type=tab")
+                .arg("--tab-title=leaf editor")
+                .arg(bin);
             for a in &args {
                 cmd.arg(a);
             }
@@ -115,7 +177,10 @@ pub(crate) fn try_new_tab_command(
         }
         TerminalEmulator::GnomeTerminal => {
             let mut cmd = Command::new("gnome-terminal");
-            cmd.arg("--tab").arg("--").arg(bin);
+            cmd.arg("--tab")
+                .arg("--title=leaf editor")
+                .arg("--")
+                .arg(bin);
             for a in &args {
                 cmd.arg(a);
             }
@@ -130,14 +195,15 @@ pub(crate) fn try_new_tab_command(
             };
             let escaped_editor = editor.replace('\\', "\\\\").replace('"', "\\\"");
             let escaped_file = file_str.replace('\\', "\\\\").replace('"', "\\\"");
+            let title_seq = r#"printf '\\033]0;leaf editor\\007'; "#;
             let script = if tp == "Apple_Terminal" {
                 format!(
-                    "tell application \"{app_name}\" to do script \"{escaped_editor} {escaped_file}\""
+                    "tell application \"{app_name}\" to do script \"{title_seq}{escaped_editor} {escaped_file}\""
                 )
             } else {
                 format!(
                     "tell application \"{app_name}\" to tell current window to \
-                     create tab with default profile command \"{escaped_editor} {escaped_file}\""
+                     create tab with default profile command \"{title_seq}{escaped_editor} {escaped_file}\""
                 )
             };
             let mut cmd = Command::new("osascript");
@@ -146,7 +212,10 @@ pub(crate) fn try_new_tab_command(
         }
         TerminalEmulator::WindowsTerminal => {
             let mut cmd = Command::new("wt");
-            cmd.arg("new-tab").arg(bin);
+            cmd.arg("new-tab")
+                .arg("--title")
+                .arg("leaf editor")
+                .arg(bin);
             for a in &args {
                 cmd.arg(a);
             }
@@ -154,10 +223,11 @@ pub(crate) fn try_new_tab_command(
             Some(cmd)
         }
         TerminalEmulator::Termux => {
+            let title_prefix = "printf '\\033]0;leaf editor\\007'; ";
             let full_cmd = if args.is_empty() {
-                format!("{bin} {file_str}")
+                format!("{title_prefix}{bin} {file_str}")
             } else {
-                format!("{bin} {} {file_str}", args.join(" "))
+                format!("{title_prefix}{bin} {} {file_str}", args.join(" "))
             };
             let mut cmd = Command::new("am");
             cmd.args([
