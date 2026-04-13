@@ -18,6 +18,7 @@ pub(super) mod search;
 pub(crate) use search::SearchState;
 
 pub(crate) mod file_picker;
+mod fuzzy;
 pub(crate) use file_picker::{FilePickerMode, FilePickerState, PickerIndexTruncation};
 use file_picker::{PendingPicker, PickerLoadState};
 
