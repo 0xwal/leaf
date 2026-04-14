@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,26 +53,33 @@ const KNOWN_EDITORS: &[(&str, EditorKind)] = &[
     ("notepad++", EditorKind::Gui),
 ];
 
-pub(crate) fn scan_available_editors() -> Vec<EditorEntry> {
-    let path_var = std::env::var("PATH").unwrap_or_default();
+pub(crate) fn which(bin: &str) -> Option<PathBuf> {
+    if bin.contains('/') || bin.contains('\\') {
+        let p = Path::new(bin);
+        return p.is_file().then(|| p.to_path_buf());
+    }
+    let path_var = std::env::var("PATH").ok()?;
     let separator = if cfg!(target_os = "windows") {
         ';'
     } else {
         ':'
     };
-    let dirs: Vec<&str> = path_var.split(separator).collect();
+    let name = if cfg!(target_os = "windows") && !bin.contains('.') {
+        format!("{bin}.exe")
+    } else {
+        bin.to_string()
+    };
+    path_var
+        .split(separator)
+        .map(|dir| Path::new(dir).join(&name))
+        .find(|p| p.is_file())
+}
+
+pub(crate) fn scan_available_editors() -> Vec<EditorEntry> {
     let mut found = Vec::new();
 
     for &(name, kind) in KNOWN_EDITORS {
-        let bin_name = if cfg!(target_os = "windows") && !name.contains('.') {
-            format!("{name}.exe")
-        } else {
-            name.to_string()
-        };
-        let exists = dirs
-            .iter()
-            .any(|dir| Path::new(dir).join(&bin_name).is_file());
-        if exists {
+        if which(name).is_some() {
             found.push(EditorEntry {
                 name: name.to_string(),
                 kind,
@@ -222,27 +229,7 @@ pub(crate) fn try_new_tab_command(
             cmd.arg(&file_str);
             Some(cmd)
         }
-        TerminalEmulator::Termux => {
-            let title_prefix = "printf '\\033]0;leaf editor\\007'; ";
-            let full_cmd = if args.is_empty() {
-                format!("{title_prefix}{bin} {file_str}")
-            } else {
-                format!("{title_prefix}{bin} {} {file_str}", args.join(" "))
-            };
-            let mut cmd = Command::new("am");
-            cmd.args([
-                "startservice",
-                "-n",
-                "com.termux/.app.TermuxService",
-                "-a",
-                "com.termux.service_execute",
-                "-e",
-                "com.termux.execute.command",
-            ]);
-            cmd.arg(full_cmd);
-            Some(cmd)
-        }
-        TerminalEmulator::Unknown => None,
+        TerminalEmulator::Termux | TerminalEmulator::Unknown => None,
     }
 }
 
@@ -276,19 +263,5 @@ pub(crate) fn open_in_editor(
             }
             Ok(EditorResult::NeedsSameTerminal)
         }
-    }
-}
-
-pub(crate) fn check_termux_external_apps() -> bool {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let path = std::path::Path::new(&home).join(".termux/termux.properties");
-    match std::fs::read_to_string(path) {
-        Ok(content) => content.lines().any(|line| {
-            let trimmed = line.trim();
-            !trimmed.starts_with('#')
-                && trimmed.contains("allow-external-apps")
-                && trimmed.contains("true")
-        }),
-        Err(_) => false,
     }
 }

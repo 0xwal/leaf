@@ -191,10 +191,6 @@ fn editor_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
             format!(" Editor not found: {msg} "),
             theme.ui.status_search_error_fg,
         ),
-        EditorFlash::TermuxPermission => (
-            " Add allow-external-apps=true to ~/.termux/termux.properties ".to_string(),
-            theme.ui.status_search_error_fg,
-        ),
     };
     Some(vec![Span::styled(
         message,

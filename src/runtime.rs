@@ -1,9 +1,6 @@
 use crate::{
     app::{App, EditorFlash, FileChange},
-    editor::{
-        self, check_termux_external_apps, classify, open_in_editor, split_editor_cmd, EditorKind,
-        EditorResult, TerminalEmulator,
-    },
+    editor::{self, classify, open_in_editor, split_editor_cmd, EditorResult},
     render::{ui, CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH},
 };
 use anyhow::Result;
@@ -89,18 +86,14 @@ pub(crate) fn run(
             needs_redraw = false;
         }
 
-        let flash_timeout = app.reload_flash_started().and_then(|started| {
-            let elapsed = started.elapsed();
-            (elapsed < FLASH_DURATION).then_some(FLASH_DURATION - elapsed)
-        });
-        let editor_flash_timeout = app.editor_flash().and_then(|(_, started)| {
-            let elapsed = started.elapsed();
-            (elapsed < EDITOR_FLASH_DURATION).then_some(EDITOR_FLASH_DURATION - elapsed)
-        });
-        let resize_timeout = pending_resize.and_then(|started| {
-            let elapsed = started.elapsed();
-            (elapsed < RESIZE_DEBOUNCE).then_some(RESIZE_DEBOUNCE - elapsed)
-        });
+        let flash_timeout = app
+            .reload_flash_started()
+            .and_then(|started| FLASH_DURATION.checked_sub(started.elapsed()));
+        let editor_flash_timeout = app
+            .editor_flash()
+            .and_then(|(_, started)| EDITOR_FLASH_DURATION.checked_sub(started.elapsed()));
+        let resize_timeout =
+            pending_resize.and_then(|started| RESIZE_DEBOUNCE.checked_sub(started.elapsed()));
         let poll_timeout = [
             if app.is_watch_enabled() {
                 Some(WATCH_INTERVAL)
@@ -407,28 +400,7 @@ fn handle_open_in_editor(
     let emulator = editor::detect_terminal_emulator();
     let kind = classify(&editor_cmd);
 
-    if emulator == TerminalEmulator::Termux && kind == EditorKind::Terminal {
-        let allowed = match app.termux_external_apps() {
-            Some(v) => v,
-            None => {
-                let v = check_termux_external_apps();
-                app.set_termux_external_apps(v);
-                v
-            }
-        };
-        if !allowed {
-            app.set_editor_flash(EditorFlash::TermuxPermission);
-        }
-    }
-
-    let effective_emulator =
-        if emulator == TerminalEmulator::Termux && app.termux_external_apps() == Some(false) {
-            TerminalEmulator::Unknown
-        } else {
-            emulator
-        };
-
-    match open_in_editor(&editor_cmd, &filepath, kind, &effective_emulator) {
+    match open_in_editor(&editor_cmd, &filepath, kind, &emulator) {
         Ok(EditorResult::Opened) => {
             let name = editor::binary_name(&editor_cmd).to_string();
             app.set_editor_flash(EditorFlash::Opened(name));

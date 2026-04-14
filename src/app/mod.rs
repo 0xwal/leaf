@@ -27,7 +27,6 @@ pub(crate) enum EditorFlash {
     Opened(String),
     NoFile,
     EditorNotFound(String),
-    TermuxPermission,
 }
 
 pub(super) mod theme_picker;
@@ -108,7 +107,6 @@ pub(crate) struct App {
     pub(super) render_width: usize,
     pub(super) editor_config: Option<String>,
     pub(super) editor_flash: Option<(EditorFlash, Instant)>,
-    pub(super) termux_external_apps: Option<bool>,
 }
 
 impl App {
@@ -221,7 +219,6 @@ impl App {
             render_width: 80,
             editor_config: None,
             editor_flash: None,
-            termux_external_apps: None,
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
@@ -443,14 +440,6 @@ impl App {
 
     pub(crate) fn clear_editor_flash(&mut self) {
         self.editor_flash = None;
-    }
-
-    pub(crate) fn termux_external_apps(&self) -> Option<bool> {
-        self.termux_external_apps
-    }
-
-    pub(crate) fn set_termux_external_apps(&mut self, value: bool) {
-        self.termux_external_apps = Some(value);
     }
 
     pub(crate) fn filepath(&self) -> Option<&std::path::Path> {
