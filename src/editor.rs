@@ -8,16 +8,17 @@ pub(crate) enum EditorKind {
 }
 
 pub(crate) fn binary_name(editor_cmd: &str) -> &str {
-    Path::new(editor_cmd.split_whitespace().next().unwrap_or(editor_cmd))
+    let full = Path::new(editor_cmd.split_whitespace().next().unwrap_or(editor_cmd))
         .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or(editor_cmd)
+        .unwrap_or(editor_cmd);
+    full.strip_suffix(".exe").unwrap_or(full)
 }
 
 pub(crate) fn classify(editor_cmd: &str) -> EditorKind {
     match binary_name(editor_cmd) {
-        "code" | "codium" | "subl" | "gedit" | "kate" | "mousepad" | "notepad.exe"
-        | "notepad++" | "zed" | "termux-open" => EditorKind::Gui,
+        "code" | "codium" | "subl" | "gedit" | "kate" | "mousepad" | "notepad" | "notepad++"
+        | "zed" | "termux-open" => EditorKind::Gui,
         _ => EditorKind::Terminal,
     }
 }
@@ -52,6 +53,7 @@ const KNOWN_EDITORS: &[(&str, EditorKind)] = &[
     ("mousepad", EditorKind::Gui),
     ("zed", EditorKind::Gui),
     ("notepad++", EditorKind::Gui),
+    ("notepad", EditorKind::Gui),
 ];
 
 pub(crate) fn which(bin: &str) -> Option<PathBuf> {
@@ -168,7 +170,7 @@ fn expand_editor_alias(editor: &str) -> String {
 
 fn platform_fallback_editor() -> &'static str {
     if cfg!(target_os = "windows") {
-        "notepad.exe"
+        "notepad"
     } else {
         "nano"
     }
@@ -262,7 +264,8 @@ pub(crate) fn open_in_editor(
     let (bin, args) = split_editor_cmd(editor);
     match kind {
         EditorKind::Gui => {
-            Command::new(bin)
+            let exec = which(bin).unwrap_or_else(|| PathBuf::from(bin));
+            Command::new(&exec)
                 .args(&args)
                 .arg(file)
                 .spawn()

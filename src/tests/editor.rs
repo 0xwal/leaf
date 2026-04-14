@@ -22,7 +22,7 @@ fn binary_name_path_with_args() {
 
 #[test]
 fn binary_name_windows() {
-    assert_eq!(binary_name("notepad.exe"), "notepad.exe");
+    assert_eq!(binary_name("notepad.exe"), "notepad");
 }
 
 #[test]
