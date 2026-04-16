@@ -1,5 +1,5 @@
 use crate::{
-    app::{App, EditorFlash, FileChange},
+    app::{App, EditorFlash, FileChange, WatchFlash, FLASH_DURATION_MS},
     editor::{self, classify, open_in_editor, split_editor_cmd, EditorResult},
     render::{ui, CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH},
 };
@@ -68,7 +68,7 @@ pub(crate) fn run(
     initial_draw_done: bool,
 ) -> Result<()> {
     const WATCH_INTERVAL: Duration = Duration::from_millis(250);
-    const FLASH_DURATION: Duration = Duration::from_millis(1500);
+    const FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
     const MOUSE_SCROLL_STEP: usize = 3;
     const RESIZE_DEBOUNCE: Duration = Duration::from_millis(120);
     const PICKER_LOAD_POLL_INTERVAL: Duration = Duration::from_millis(50);
@@ -92,6 +92,9 @@ pub(crate) fn run(
         let editor_flash_timeout = app
             .editor_flash()
             .and_then(|(_, started)| EDITOR_FLASH_DURATION.checked_sub(started.elapsed()));
+        let watch_flash_timeout = app
+            .watch_flash()
+            .and_then(|(_, started)| WATCH_FLASH_DURATION.checked_sub(started.elapsed()));
         let resize_timeout =
             pending_resize.and_then(|started| RESIZE_DEBOUNCE.checked_sub(started.elapsed()));
         let poll_timeout = [
@@ -107,6 +110,7 @@ pub(crate) fn run(
             },
             flash_timeout,
             editor_flash_timeout,
+            watch_flash_timeout,
             resize_timeout,
         ]
         .into_iter()
@@ -210,16 +214,17 @@ pub(crate) fn run(
                             _ => state_changed = false,
                         }
                     } else if app.is_theme_picker_open() {
-                        let dismiss = matches!(key.code, KeyCode::Esc | KeyCode::Char('T'))
-                            || (key.code == KeyCode::Char('c')
-                                && key.modifiers.contains(KeyModifiers::CONTROL));
-                        if dismiss {
-                            app.restore_theme_picker_preview(ss, themes);
-                            needs_redraw = true;
-                            state_changed = false;
-                        }
                         match key.code {
-                            _ if dismiss => {}
+                            KeyCode::Esc | KeyCode::Char('T') => {
+                                app.restore_theme_picker_preview(ss, themes);
+                                needs_redraw = true;
+                                state_changed = false;
+                            }
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                app.restore_theme_picker_preview(ss, themes);
+                                needs_redraw = true;
+                                state_changed = false;
+                            }
                             KeyCode::Enter => app.close_theme_picker(),
                             KeyCode::Char('j') | KeyCode::Down => {
                                 app.move_theme_picker_down();
@@ -292,8 +297,31 @@ pub(crate) fn run(
                             KeyCode::Char('?') => {
                                 app.open_help();
                             }
-                            KeyCode::Char('r') if app.is_watch_enabled() => {
-                                app.request_reload(ss, themes);
+                            KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                app.toggle_watch();
+                            }
+                            KeyCode::Char('w') => {
+                                app.toggle_watch();
+                            }
+                            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                if app.filepath().is_none() {
+                                    let flash = app.watch_flash_for_no_file();
+                                    app.set_watch_flash(flash);
+                                } else if !app.is_watch_enabled() {
+                                    app.set_watch_flash(WatchFlash::NotActive);
+                                } else if !app.request_reload(ss, themes) {
+                                    app.set_watch_flash(WatchFlash::FileNotFound);
+                                }
+                            }
+                            KeyCode::Char('r') => {
+                                if app.filepath().is_none() {
+                                    let flash = app.watch_flash_for_no_file();
+                                    app.set_watch_flash(flash);
+                                } else if !app.is_watch_enabled() {
+                                    app.set_watch_flash(WatchFlash::NotActive);
+                                } else if !app.request_reload(ss, themes) {
+                                    app.set_watch_flash(WatchFlash::FileNotFound);
+                                }
                             }
                             KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 app.begin_search()
@@ -357,13 +385,23 @@ pub(crate) fn run(
         }
 
         if app.is_watch_enabled() {
-            if let Some(change) = app.check_modified() {
-                std::thread::sleep(Duration::from_millis(50));
-                if app.reload(ss, themes) {
-                    app.set_last_file_state(match change {
-                        FileChange::Metadata(state) | FileChange::Content(state) => state,
-                    });
-                    needs_redraw = true;
+            let file_ok = app.filepath().map(|p| p.exists()).unwrap_or(false);
+            if !file_ok && !app.is_watch_error() {
+                app.set_watch_error(true);
+                needs_redraw = true;
+            } else if file_ok && app.is_watch_error() {
+                app.set_watch_error(false);
+                needs_redraw = true;
+            }
+            if file_ok {
+                if let Some(change) = app.check_modified() {
+                    std::thread::sleep(Duration::from_millis(50));
+                    if app.reload(ss, themes) {
+                        app.set_last_file_state(match change {
+                            FileChange::Metadata(state) | FileChange::Content(state) => state,
+                        });
+                        needs_redraw = true;
+                    }
                 }
             }
             if let Some(t) = app.reload_flash_started() {
@@ -380,11 +418,19 @@ pub(crate) fn run(
                 needs_redraw = true;
             }
         }
+
+        if let Some((_, started)) = app.watch_flash() {
+            if started.elapsed() >= WATCH_FLASH_DURATION {
+                app.clear_watch_flash();
+                needs_redraw = true;
+            }
+        }
     }
     Ok(())
 }
 
-const EDITOR_FLASH_DURATION: Duration = Duration::from_millis(2000);
+const EDITOR_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
+const WATCH_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
 
 fn strip_unc_prefix(path: std::path::PathBuf) -> std::path::PathBuf {
     if cfg!(target_os = "windows") {

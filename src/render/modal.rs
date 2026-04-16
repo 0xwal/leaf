@@ -41,7 +41,7 @@ fn modal_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
 
 pub(super) fn render_help_popup(f: &mut Frame) {
     let theme = app_theme();
-    let area = centered_rect(54, 17, f.area());
+    let area = centered_rect(54, 19, f.area());
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
@@ -83,6 +83,15 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::styled("top/bottom", text_style),
         ]),
         Line::from(""),
+        Line::from(vec![Span::styled("Watch", section_style)]),
+        Line::from(vec![
+            Span::styled("Ctrl+W, w  ", key_style),
+            Span::styled("toggle watch", text_style),
+            Span::raw("      "),
+            Span::styled("Ctrl+R, r  ", key_style),
+            Span::styled("reload", text_style),
+        ]),
+        Line::from(""),
         Line::from(vec![Span::styled("Actions", section_style)]),
         Line::from(vec![
             Span::styled("Shift+E    ", key_style),
@@ -99,15 +108,11 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::styled("help", text_style),
         ]),
         Line::from(vec![
-            Span::styled("r          ", key_style),
-            Span::styled("reload (watch)", text_style),
-            Span::raw("    "),
-            Span::styled("q          ", key_style),
-            Span::styled("quit", text_style),
-        ]),
-        Line::from(vec![
             Span::styled("t          ", key_style),
             Span::styled("toggle toc", text_style),
+            Span::raw("        "),
+            Span::styled("q          ", key_style),
+            Span::styled("quit", text_style),
         ]),
         Line::from(""),
         modal_footer_line(&["esc close", "? close"], theme.ui.toc_bg),
@@ -565,7 +570,7 @@ pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
     if entries.is_empty() {
         lines.push(Line::from(vec![Span::styled(
             "No editors found",
-            Style::default().fg(theme.ui.status_search_error_fg),
+            Style::default().fg(theme.ui.status_error_fg),
         )]));
     } else {
         let has_terminal = entries.iter().any(|e| e.kind == EditorKind::Terminal);
