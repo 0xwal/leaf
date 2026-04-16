@@ -1,5 +1,5 @@
 use crate::{
-    app::{App, EditorFlash},
+    app::{App, EditorFlash, WatchFlash, FLASH_DURATION_MS},
     theme::app_theme,
 };
 use ratatui::{
@@ -52,23 +52,49 @@ pub(crate) fn status_filename_section(filename: &str) -> Vec<Span<'static>> {
     )]
 }
 
+fn watch_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
+    let (flash, started) = app.watch_flash()?;
+    if started.elapsed() >= std::time::Duration::from_millis(FLASH_DURATION_MS) {
+        return None;
+    }
+    let theme = app_theme();
+    let bar_bg = status_bar_bg();
+    let (text, fg) = match flash {
+        WatchFlash::Activated => (" Watch mode activated ", theme.ui.status_success_fg),
+        WatchFlash::Deactivated => (" Watch mode deactivated ", theme.ui.status_warning_fg),
+        WatchFlash::Stdin => (" Stdin cannot be watched ", theme.ui.status_error_fg),
+        WatchFlash::NoFile => (" No file to watch ", theme.ui.status_error_fg),
+        WatchFlash::FileNotFound => (" File not found ", theme.ui.status_error_fg),
+        WatchFlash::NotActive => (" Watch mode is not active ", theme.ui.status_warning_fg),
+    };
+    Some(vec![Span::styled(text, Style::default().fg(fg).bg(bar_bg))])
+}
+
 pub(crate) fn status_watch_section(app: &App) -> Option<Vec<Span<'static>>> {
     let theme = app_theme();
     if !app.is_watch_enabled() {
         return None;
     }
 
+    if app.is_watch_error() {
+        return Some(vec![Span::styled(
+            " ⟳ error ",
+            Style::default()
+                .fg(theme.ui.status_error_fg)
+                .bg(theme.ui.status_error_bg),
+        )]);
+    }
+
     let flash_active = app
         .reload_flash_started()
-        .map(|t| t.elapsed() < std::time::Duration::from_millis(1500))
+        .map(|t| t.elapsed() < std::time::Duration::from_millis(FLASH_DURATION_MS))
         .unwrap_or(false);
     let span = if flash_active {
         Span::styled(
             " ⟳ reloaded ",
             Style::default()
                 .fg(theme.ui.status_reloaded_fg)
-                .bg(theme.ui.status_reloaded_bg)
-                .add_modifier(Modifier::BOLD),
+                .bg(theme.ui.status_reloaded_bg),
         )
     } else {
         Span::styled(
@@ -100,15 +126,15 @@ pub(crate) fn status_search_section(app: &App) -> Option<Vec<Span<'static>>> {
         Span::styled(
             format!(" ✗ {} ", app.search_query()),
             Style::default()
-                .fg(theme.ui.status_search_error_fg)
-                .bg(theme.ui.status_search_bg),
+                .fg(theme.ui.status_error_fg)
+                .bg(theme.ui.status_error_bg),
         )
     } else {
         Span::styled(
             format!(" {}/{} ", app.search_index() + 1, app.search_match_count()),
             Style::default()
-                .fg(theme.ui.status_search_match_fg)
-                .bg(theme.ui.status_search_bg),
+                .fg(theme.ui.status_success_fg)
+                .bg(theme.ui.status_success_bg),
         )
     };
     Some(vec![span])
@@ -149,20 +175,17 @@ pub(crate) fn status_percent_section(pct: u16, bar_bg: Color) -> Vec<Span<'stati
 
 fn editor_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
     let (flash, started) = app.editor_flash()?;
-    if started.elapsed() >= std::time::Duration::from_millis(2000) {
+    if started.elapsed() >= std::time::Duration::from_millis(FLASH_DURATION_MS) {
         return None;
     }
     let theme = app_theme();
     let bar_bg = status_bar_bg();
     let (message, fg) = match flash {
-        EditorFlash::Opened(name) => (format!(" Opened in {name} "), theme.ui.status_reloaded_fg),
-        EditorFlash::NoFile => (
-            " No file to edit ".to_string(),
-            theme.ui.status_search_error_fg,
-        ),
+        EditorFlash::Opened(name) => (format!(" Opened in {name} "), theme.ui.status_success_fg),
+        EditorFlash::NoFile => (" No file to edit ".to_string(), theme.ui.status_error_fg),
         EditorFlash::EditorNotFound(msg) => (
             format!(" Editor not found: {msg} "),
-            theme.ui.status_search_error_fg,
+            theme.ui.status_error_fg,
         ),
     };
     Some(vec![Span::styled(
@@ -176,6 +199,12 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
     let outer_separator = Span::raw(" ");
 
     if let Some(flash_section) = editor_flash_section(app) {
+        let mut left = status_brand_section();
+        left.extend(flash_section);
+        return join_span_sections(vec![left], outer_separator);
+    }
+
+    if let Some(flash_section) = watch_flash_section(app) {
         let mut left = status_brand_section();
         left.extend(flash_section);
         return join_span_sections(vec![left], outer_separator);

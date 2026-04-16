@@ -14,6 +14,8 @@ use std::{
 };
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
+pub(crate) const FLASH_DURATION_MS: u64 = 1500;
+
 pub(super) mod search;
 pub(crate) use search::SearchState;
 
@@ -27,6 +29,16 @@ pub(crate) enum EditorFlash {
     Opened(String),
     NoFile,
     EditorNotFound(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum WatchFlash {
+    Activated,
+    Deactivated,
+    Stdin,
+    NoFile,
+    FileNotFound,
+    NotActive,
 }
 
 pub(super) mod theme_picker;
@@ -67,6 +79,8 @@ pub(crate) struct StatusCacheKey {
     editor_flash_active: bool,
     file_picker_open: bool,
     picker_loading: bool,
+    watch_flash_active: bool,
+    watch_error: bool,
 }
 
 pub(crate) struct AppConfig {
@@ -89,6 +103,7 @@ pub(crate) struct App {
     pub(super) filename: String,
     pub(super) source: String,
     watch: bool,
+    watch_error: bool,
     pub(super) filepath: Option<PathBuf>,
     pub(super) last_file_state: Option<FileState>,
     pub(super) last_content_hash: u64,
@@ -109,6 +124,7 @@ pub(crate) struct App {
     pub(super) render_width: usize,
     pub(super) editor_config: Option<String>,
     pub(super) editor_flash: Option<(EditorFlash, Instant)>,
+    watch_flash: Option<(WatchFlash, Instant)>,
 }
 
 impl App {
@@ -182,6 +198,7 @@ impl App {
             filename,
             source,
             watch,
+            watch_error: false,
             filepath,
             last_file_state,
             last_content_hash: 0,
@@ -221,6 +238,7 @@ impl App {
             render_width: 80,
             editor_config: None,
             editor_flash: None,
+            watch_flash: None,
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
@@ -233,6 +251,14 @@ impl App {
 
     pub(crate) fn is_watch_enabled(&self) -> bool {
         self.watch
+    }
+
+    pub(crate) fn is_watch_error(&self) -> bool {
+        self.watch_error
+    }
+
+    pub(crate) fn set_watch_error(&mut self, error: bool) {
+        self.watch_error = error;
     }
 
     pub(crate) fn debug_input_enabled(&self) -> bool {
@@ -380,15 +406,21 @@ impl App {
             watch: self.watch,
             flash_active: self
                 .reload_flash
-                .map(|t| t.elapsed() < Duration::from_millis(1500))
+                .map(|t| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
                 .unwrap_or(false),
             editor_flash_active: self
                 .editor_flash
                 .as_ref()
-                .map(|(_, t)| t.elapsed() < Duration::from_millis(2000))
+                .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
                 .unwrap_or(false),
             file_picker_open: self.is_file_picker_open(),
             picker_loading: self.is_picker_loading(),
+            watch_flash_active: self
+                .watch_flash
+                .as_ref()
+                .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
+                .unwrap_or(false),
+            watch_error: self.watch_error,
         };
 
         if self.status_cache_key.as_ref() == Some(&cache_key) {
@@ -444,6 +476,56 @@ impl App {
 
     pub(crate) fn clear_editor_flash(&mut self) {
         self.editor_flash = None;
+    }
+
+    pub(crate) fn toggle_watch(&mut self) {
+        let p = match &self.filepath {
+            None => {
+                self.set_watch_flash(if self.filename == "stdin" {
+                    WatchFlash::Stdin
+                } else {
+                    WatchFlash::NoFile
+                });
+                return;
+            }
+            Some(p) => p,
+        };
+        if !p.exists() {
+            self.set_watch_flash(WatchFlash::FileNotFound);
+            return;
+        }
+        self.watch = !self.watch;
+        self.set_watch_flash(if self.watch {
+            WatchFlash::Activated
+        } else {
+            WatchFlash::Deactivated
+        });
+        if self.watch {
+            self.last_file_state = None;
+            self.last_content_hash = hash_str(&self.source);
+            self.last_hash_check = Some(Instant::now());
+            self.watch_error = false;
+        }
+    }
+
+    pub(crate) fn watch_flash(&self) -> Option<(&WatchFlash, &Instant)> {
+        self.watch_flash.as_ref().map(|(f, t)| (f, t))
+    }
+
+    pub(crate) fn set_watch_flash(&mut self, flash: WatchFlash) {
+        self.watch_flash = Some((flash, Instant::now()));
+    }
+
+    pub(crate) fn watch_flash_for_no_file(&self) -> WatchFlash {
+        if self.filename == "stdin" {
+            WatchFlash::Stdin
+        } else {
+            WatchFlash::NoFile
+        }
+    }
+
+    pub(crate) fn clear_watch_flash(&mut self) {
+        self.watch_flash = None;
     }
 
     pub(crate) fn filepath(&self) -> Option<&std::path::Path> {
@@ -657,7 +739,9 @@ impl App {
         self.last_file_state = file_state;
         self.last_content_hash = content_hash;
         self.last_hash_check = Some(Instant::now());
-        self.reload_flash = Some(Instant::now());
+        if self.watch_flash.is_none() {
+            self.reload_flash = Some(Instant::now());
+        }
         true
     }
 }
