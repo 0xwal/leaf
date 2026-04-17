@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Terminal Markdown previewer — GUI-like experience.
+  Terminal Markdown <a href="https://github.com/RivoLink/leaf/blob/main/images/preview.png" alt="Previewer">Previewer</a> — GUI-like experience.
 </p>
 
 ## Install
