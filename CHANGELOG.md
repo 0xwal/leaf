@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.10.0](https://github.com/RivoLink/leaf/releases/tag/1.10.0)] - 2026-04-17
+
+### Added
+
+- publish npm packages ([#29](https://github.com/RivoLink/leaf/pull/29))
+
 ## [[1.9.3](https://github.com/RivoLink/leaf/releases/tag/1.9.3)] - 2026-04-17
 
 ### Changed
