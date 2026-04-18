@@ -12,7 +12,7 @@
   "bin": {
     "leaf": "./bin/leaf.js"
   },
-  "files": ["bin/leaf.js"],
+  "files": ["bin/leaf.js", "README.md"],
   "optionalDependencies": {
     "@rivolink/leaf-linux-x64": "0.0.0",
     "@rivolink/leaf-linux-arm64": "0.0.0",

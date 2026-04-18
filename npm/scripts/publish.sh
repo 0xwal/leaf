@@ -38,10 +38,11 @@ for platform in "${!BINARIES[@]}"; do
     chmod +x "$pkg_dir/leaf"
   fi
 
+  cp "$NPM_DIR/../README.md" "$pkg_dir/README.md"
   npm publish "$pkg_dir" --access public
   echo "Published @rivolink/leaf-$platform@$VERSION"
 
-  rm -f "$pkg_dir/leaf" "$pkg_dir/leaf.exe"
+  rm -f "$pkg_dir/leaf" "$pkg_dir/leaf.exe" "$pkg_dir/README.md"
 done
 
 node -e "
@@ -53,5 +54,7 @@ node -e "
   fs.writeFileSync('$NPM_DIR/package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
 
+cp "$NPM_DIR/../README.md" "$NPM_DIR/README.md"
 npm publish "$NPM_DIR" --access public
+rm -f "$NPM_DIR/README.md"
 echo "Published @rivolink/leaf@$VERSION"
