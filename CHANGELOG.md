@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.12.0](https://github.com/RivoLink/leaf/releases/tag/1.12.0)] - 2026-04-20
+
+### Added
+
+- interactive drag/hover scrollbar ([#36](https://github.com/RivoLink/leaf/pull/36))
+
 ## [[1.11.1](https://github.com/RivoLink/leaf/releases/tag/1.11.1)] - 2026-04-20
 
 ### Docs
