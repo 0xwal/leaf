@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.13.0](https://github.com/RivoLink/leaf/releases/tag/1.13.0)] - 2026-04-22
+
+### Added
+
+- path viewer popup ([#37](https://github.com/RivoLink/leaf/pull/37))
+
+### Changed
+
+- refacto modal to popup ([#38](https://github.com/RivoLink/leaf/pull/38))
+
 ## [[1.12.0](https://github.com/RivoLink/leaf/releases/tag/1.12.0)] - 2026-04-20
 
 ### Added
