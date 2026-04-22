@@ -9,6 +9,8 @@ use ratatui::{
     Frame,
 };
 
+#[cfg(test)]
+pub(crate) use modal::wrap_path_lines;
 pub(crate) use status::build_status_bar;
 pub(crate) use toc::{build_toc_line_with_index, toc_header_line};
 
@@ -51,6 +53,8 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
         modal::render_theme_picker(f, app);
     } else if app.is_editor_picker_open() {
         modal::render_editor_picker(f, app);
+    } else if app.is_path_popup_open() {
+        modal::render_path_popup(f, app);
     }
 }
 

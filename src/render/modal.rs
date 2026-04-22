@@ -72,7 +72,7 @@ fn modal_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
 
 pub(super) fn render_help_popup(f: &mut Frame) {
     let theme = app_theme();
-    let area = centered_rect(54, 21, f.area());
+    let area = centered_rect(54, 22, f.area());
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
@@ -153,11 +153,15 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::styled("help", text_style),
         ]),
         Line::from(vec![
-            Span::styled("t          ", key_style),
-            Span::styled("toggle toc", text_style),
-            Span::raw("        "),
+            Span::styled("p          ", key_style),
+            Span::styled("path viewer", text_style),
+            Span::raw("       "),
             Span::styled("q          ", key_style),
             Span::styled("quit", text_style),
+        ]),
+        Line::from(vec![
+            Span::styled("t          ", key_style),
+            Span::styled("toggle toc", text_style),
         ]),
         Line::from(""),
         modal_footer_line(&["esc close", "? close"], theme.ui.toc_bg),
@@ -686,6 +690,94 @@ pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
         Paragraph::new(lines).block(
             Block::default()
                 .title("─ Editor ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.ui.toc_border))
+                .style(Style::default().bg(theme.ui.toc_bg))
+                .padding(Padding::new(1, 1, 0, 0)),
+        ),
+        area,
+    );
+}
+
+pub(crate) fn wrap_path_lines(
+    label: &str,
+    path: &str,
+    max_width: usize,
+    label_style: Style,
+    value_style: Style,
+) -> Vec<Line<'static>> {
+    let label_len = label.len();
+    let value_width = max_width.saturating_sub(label_len);
+    if path.len() <= value_width {
+        return vec![Line::from(vec![
+            Span::styled(label.to_string(), label_style),
+            Span::styled(path.to_string(), value_style),
+        ])];
+    }
+    let indent = " ".repeat(label_len);
+    let mut result = Vec::new();
+    let mut pos = 0;
+    while pos < path.len() {
+        let end = (pos + value_width).min(path.len());
+        if pos == 0 {
+            result.push(Line::from(vec![
+                Span::styled(label.to_string(), label_style),
+                Span::styled(path[..end].to_string(), value_style),
+            ]));
+        } else {
+            result.push(Line::from(vec![
+                Span::raw(indent.clone()),
+                Span::styled(path[pos..end].to_string(), value_style),
+            ]));
+        }
+        pos = end;
+    }
+    result
+}
+
+pub(super) fn render_path_popup(f: &mut Frame, app: &App) {
+    let theme = app_theme();
+    let label_style = Style::default()
+        .fg(theme.ui.toc_accent)
+        .add_modifier(Modifier::BOLD);
+    let value_style = Style::default().fg(theme.ui.toc_primary_inactive);
+
+    let (relative, absolute) = if let Some(path) = app.filepath() {
+        let abs = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let rel = std::env::current_dir()
+            .ok()
+            .and_then(|cwd| abs.strip_prefix(&cwd).ok().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| path.to_path_buf());
+        (rel.display().to_string(), abs.display().to_string())
+    } else {
+        ("(stdin)".to_string(), "(stdin)".to_string())
+    };
+
+    const POPUP_WIDTH: usize = 78;
+    const CHROME: usize = 4; // 2 borders + 2 padding
+    let max_width = POPUP_WIDTH - CHROME;
+    let rel_lines = wrap_path_lines("Relative: ", &relative, max_width, label_style, value_style);
+    let abs_lines = wrap_path_lines("Absolute: ", &absolute, max_width, label_style, value_style);
+    let content_height = 1 + rel_lines.len() + abs_lines.len() + 1 + 1; // top pad + rel + abs + bottom pad + footer
+    let popup_height = content_height + 2; // borders
+
+    let area = centered_rect(POPUP_WIDTH as u16, popup_height as u16, f.area());
+
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    lines.push(Line::from(""));
+    lines.extend(rel_lines);
+    lines.extend(abs_lines);
+    lines.push(Line::from(""));
+    lines.push(modal_footer_line(
+        &["enter close", "esc close"],
+        theme.ui.toc_bg,
+    ));
+
+    f.render_widget(Clear, area);
+    f.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .title("─ File Path ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.ui.toc_border))
                 .style(Style::default().bg(theme.ui.toc_bg))
