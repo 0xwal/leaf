@@ -316,6 +316,16 @@ pub(crate) fn run(
                             KeyCode::Char('k') | KeyCode::Up => app.move_editor_picker_up(),
                             _ => state_changed = false,
                         }
+                    } else if app.is_path_popup_open() {
+                        match key.code {
+                            KeyCode::Enter | KeyCode::Esc | KeyCode::Char('p') => {
+                                app.close_path_popup()
+                            }
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                app.close_path_popup();
+                            }
+                            _ => state_changed = false,
+                        }
                     } else if app.is_search_mode() {
                         match key.code {
                             KeyCode::Esc => app.cancel_search(),
@@ -396,6 +406,9 @@ pub(crate) fn run(
                             KeyCode::Char('P') => {
                                 app.queue_file_picker(app.picker_dir());
                             }
+                            KeyCode::Char('p') => {
+                                app.open_path_popup();
+                            }
                             KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
                                 if let Some(n) = c.to_digit(10) {
                                     app.jump_to_toc(n as usize - 1);
@@ -414,7 +427,10 @@ pub(crate) fn run(
                 Event::Mouse(mouse) => {
                     let prev_pos = app.mouse_position;
                     app.mouse_position = (mouse.column, mouse.row);
-                    let state_changed = if app.is_file_picker_open() || app.is_theme_picker_open() {
+                    let state_changed = if app.is_file_picker_open()
+                        || app.is_theme_picker_open()
+                        || app.is_path_popup_open()
+                    {
                         if matches!(mouse.kind, MouseEventKind::Up(..)) {
                             app.scrollbar_dragging = false;
                         }

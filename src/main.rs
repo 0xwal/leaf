@@ -36,6 +36,8 @@ pub(crate) use markdown::{display_width, line_plain_text};
 #[cfg(test)]
 pub(crate) use read_stdin_limited as read_stdin_with_limit;
 #[cfg(test)]
+pub(crate) use render::wrap_path_lines;
+#[cfg(test)]
 pub(crate) use runtime::should_handle_key;
 #[cfg(test)]
 pub(crate) use theme::{parse_theme_preset, theme_preset_label, ThemePreset, THEME_PRESETS};

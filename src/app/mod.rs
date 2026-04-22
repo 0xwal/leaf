@@ -116,6 +116,7 @@ pub(crate) struct App {
     status_line: Line<'static>,
     status_cache_key: Option<StatusCacheKey>,
     pub(super) help_open: bool,
+    pub(super) path_popup_open: bool,
     pub(super) file_picker: FilePickerState,
     pub(super) pending_picker: PendingPicker,
     pub(super) picker_load_state: PickerLoadState,
@@ -214,6 +215,7 @@ impl App {
             status_line: Line::default(),
             status_cache_key: None,
             help_open: false,
+            path_popup_open: false,
             file_picker: FilePickerState {
                 open: false,
                 mode: FilePickerMode::Browser,
@@ -456,6 +458,18 @@ impl App {
 
     pub(crate) fn is_help_open(&self) -> bool {
         self.help_open
+    }
+
+    pub(crate) fn open_path_popup(&mut self) {
+        self.path_popup_open = true;
+    }
+
+    pub(crate) fn close_path_popup(&mut self) {
+        self.path_popup_open = false;
+    }
+
+    pub(crate) fn is_path_popup_open(&self) -> bool {
+        self.path_popup_open
     }
 
     pub(crate) fn clear_reload_flash(&mut self) {
