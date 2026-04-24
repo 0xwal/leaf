@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.15.3](https://github.com/RivoLink/leaf/releases/tag/1.15.3)] - 2026-04-24
+
+### Fixed
+
+- patch rustls-webpki vuln ([#48](https://github.com/RivoLink/leaf/pull/48))
+
 ## [[1.15.2](https://github.com/RivoLink/leaf/releases/tag/1.15.2)] - 2026-04-24
 
 ### Docs
