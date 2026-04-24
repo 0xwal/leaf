@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.15.2](https://github.com/RivoLink/leaf/releases/tag/1.15.2)] - 2026-04-24
+
+### Docs
+
+- clean-up readme sections ([#46](https://github.com/RivoLink/leaf/pull/46))
+
+### Changed
+
+- add jed/xjed editors ([#47](https://github.com/RivoLink/leaf/pull/47))
+
 ## [[1.15.1](https://github.com/RivoLink/leaf/releases/tag/1.15.1)] - 2026-04-24
 
 ### Docs
