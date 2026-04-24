@@ -16,7 +16,19 @@ pub(crate) struct CliOptions {
 }
 
 pub(crate) fn usage_text() -> &'static str {
-    "Usage:  leaf [--watch] [--theme arctic|forest|ocean|solarized-dark] [--editor <name>] [file.md]\n        leaf [--watch] --picker\n        leaf --update\n        echo '# Hello' | leaf"
+    "Usage:  leaf [OPTIONS] [file.md]\n\
+     \x20       leaf [--watch] --picker\n\
+     \x20       leaf --update\n\
+     \x20       echo '# Hello' | leaf\n\
+     \n\
+     Options:\n\
+     \x20 -h, --help                 Show this help message and exit\n\
+     \x20 -V, --version              Show version information and exit\n\
+     \x20 -w, --watch                Watch the file for changes and reload automatically\n\
+     \x20     --theme <PRESET>       Set color theme (arctic|forest|ocean|solarized-dark)\n\
+     \x20 -e, --editor <NAME>        Set external editor (nano|vim|code|subl|emacs)\n\
+     \x20     --picker               Open the file browser picker\n\
+     \x20     --update               Update leaf to the latest version"
 }
 
 pub(crate) fn version_text() -> &'static str {
