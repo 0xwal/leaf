@@ -18,7 +18,7 @@ pub(crate) fn binary_name(editor_cmd: &str) -> &str {
 pub(crate) fn classify(editor_cmd: &str) -> EditorKind {
     match binary_name(editor_cmd) {
         "code" | "codium" | "subl" | "gedit" | "kate" | "mousepad" | "notepad" | "notepad++"
-        | "zed" | "termux-open" => EditorKind::Gui,
+        | "zed" | "xjed" | "termux-open" => EditorKind::Gui,
         _ => EditorKind::Terminal,
     }
 }
@@ -45,6 +45,7 @@ const KNOWN_EDITORS: &[(&str, EditorKind)] = &[
     ("micro", EditorKind::Terminal),
     ("helix", EditorKind::Terminal),
     ("emacs", EditorKind::Terminal),
+    ("jed", EditorKind::Terminal),
     ("code", EditorKind::Gui),
     ("codium", EditorKind::Gui),
     ("subl", EditorKind::Gui),
@@ -52,6 +53,7 @@ const KNOWN_EDITORS: &[(&str, EditorKind)] = &[
     ("kate", EditorKind::Gui),
     ("mousepad", EditorKind::Gui),
     ("zed", EditorKind::Gui),
+    ("xjed", EditorKind::Gui),
     ("notepad", EditorKind::Gui),
     ("notepad++", EditorKind::Gui),
 ];
