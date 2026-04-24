@@ -36,6 +36,7 @@ fn classify_gui_editors() {
     assert_eq!(classify("notepad.exe"), EditorKind::Gui);
     assert_eq!(classify("notepad++"), EditorKind::Gui);
     assert_eq!(classify("zed"), EditorKind::Gui);
+    assert_eq!(classify("xjed"), EditorKind::Gui);
 }
 
 #[test]
@@ -46,6 +47,7 @@ fn classify_terminal_editors() {
     assert_eq!(classify("micro"), EditorKind::Terminal);
     assert_eq!(classify("helix"), EditorKind::Terminal);
     assert_eq!(classify("emacs"), EditorKind::Terminal);
+    assert_eq!(classify("jed"), EditorKind::Terminal);
 }
 
 #[test]
