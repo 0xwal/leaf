@@ -6,14 +6,43 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthChar;
 
+use super::latex;
 use super::width::{display_width, expand_tabs};
+
+#[derive(Clone)]
+enum CellFragment {
+    Text(String),
+    Code(String),
+    InlineMath(String),
+}
+
+impl CellFragment {
+    fn rendered_text(&self) -> String {
+        match self {
+            CellFragment::Text(t) | CellFragment::Code(t) => t.clone(),
+            CellFragment::InlineMath(t) => latex::to_unicode(t),
+        }
+    }
+
+    fn display_width(&self) -> usize {
+        let w = display_width(&self.rendered_text());
+        match self {
+            CellFragment::Text(_) => w,
+            _ => w + 2,
+        }
+    }
+
+    fn is_text(&self) -> bool {
+        matches!(self, CellFragment::Text(_))
+    }
+}
 
 pub(super) struct TableBuf {
     pub(super) alignments: Vec<Alignment>,
-    rows: Vec<Vec<String>>,
+    rows: Vec<Vec<Vec<CellFragment>>>,
     header_count: usize,
-    current_row: Vec<String>,
-    current_cell: String,
+    current_row: Vec<Vec<CellFragment>>,
+    current_cell: Vec<CellFragment>,
     pub(super) in_header: bool,
 }
 
@@ -35,8 +64,16 @@ pub(super) fn handle_table_event(
     };
 
     match ev {
-        MdEvent::Text(t) | MdEvent::Code(t) => {
+        MdEvent::Text(t) => {
             tb.push_text(t.as_ref());
+            true
+        }
+        MdEvent::Code(t) => {
+            tb.push_code(t.as_ref());
+            true
+        }
+        MdEvent::InlineMath(t) => {
+            tb.push_inline_math(t.as_ref());
             true
         }
         MdEvent::Start(Tag::TableCell) => true,
@@ -84,16 +121,29 @@ impl TableBuf {
             rows: vec![],
             header_count: 0,
             current_row: vec![],
-            current_cell: String::new(),
+            current_cell: vec![],
             in_header: false,
         }
     }
     fn push_text(&mut self, t: &str) {
-        self.current_cell.push_str(t);
+        self.current_cell.push(CellFragment::Text(t.to_string()));
+    }
+    fn push_code(&mut self, t: &str) {
+        self.current_cell.push(CellFragment::Code(t.to_string()));
+    }
+    fn push_inline_math(&mut self, t: &str) {
+        self.current_cell
+            .push(CellFragment::InlineMath(t.to_string()));
     }
     fn end_cell(&mut self) {
-        let cell = std::mem::take(&mut self.current_cell).trim().to_string();
-        self.current_row.push(cell);
+        let mut frags = std::mem::take(&mut self.current_cell);
+        if let Some(CellFragment::Text(t)) = frags.first_mut() {
+            *t = t.trim_start().to_string();
+        }
+        if let Some(CellFragment::Text(t)) = frags.last_mut() {
+            *t = t.trim_end().to_string();
+        }
+        self.current_row.push(frags);
     }
     fn end_row(&mut self) {
         let row = std::mem::take(&mut self.current_row);
@@ -122,7 +172,7 @@ impl TableBuf {
         for row in &self.rows {
             for (ci, cell) in row.iter().enumerate() {
                 if ci < col_count {
-                    col_widths[ci] = col_widths[ci].max(display_width(cell));
+                    col_widths[ci] = col_widths[ci].max(fragments_display_width(cell));
                     min_widths[ci] = min_widths[ci].max(min_table_cell_width(cell));
                 }
             }
@@ -151,16 +201,15 @@ impl TableBuf {
             border,
         ));
 
+        let empty_cell: Vec<CellFragment> = vec![];
         for (ri, row) in self.rows.iter().enumerate() {
             let is_hdr = ri < self.header_count;
-            let wrapped_cells: Vec<Vec<String>> = col_widths
+            let wrapped_cells: Vec<Vec<Vec<CellFragment>>> = col_widths
                 .iter()
                 .copied()
                 .enumerate()
                 .take(col_count)
-                .map(|(ci, width)| {
-                    wrap_table_cell(row.get(ci).map(|s| s.as_str()).unwrap_or(""), width)
-                })
+                .map(|(ci, width)| wrap_table_cell(row.get(ci).unwrap_or(&empty_cell), width))
                 .collect();
             let row_height = wrapped_cells
                 .iter()
@@ -171,15 +220,12 @@ impl TableBuf {
             for line_idx in 0..row_height {
                 let mut spans = vec![Span::raw(ind), Span::styled("│", border)];
                 for (ci, width) in col_widths.iter().copied().enumerate().take(col_count) {
-                    let txt = wrapped_cells[ci]
-                        .get(line_idx)
-                        .map(|s| s.as_str())
-                        .unwrap_or("");
+                    let frags = wrapped_cells[ci].get(line_idx).unwrap_or(&empty_cell);
                     let align = self.alignments.get(ci).copied().unwrap_or(Alignment::None);
-                    let pad = align_cell(txt, width, align);
-                    let st = if is_hdr { header } else { cell };
+                    let base_style = if is_hdr { header } else { cell };
+                    let cell_spans = align_cell(frags, width, align, base_style, theme);
                     spans.push(Span::raw(" "));
-                    spans.push(Span::styled(pad, st));
+                    spans.extend(cell_spans);
                     spans.push(Span::raw(" "));
                     spans.push(Span::styled("│", border));
                 }
@@ -250,14 +296,26 @@ impl TableBuf {
     }
 }
 
-fn min_table_cell_width(text: &str) -> usize {
-    let max_word = text
-        .split_whitespace()
-        .map(display_width)
-        .max()
-        .unwrap_or(0)
-        .min(12);
-    max_word.max(4)
+fn fragments_display_width(frags: &[CellFragment]) -> usize {
+    frags.iter().map(|f| f.display_width()).sum()
+}
+
+fn min_table_cell_width(frags: &[CellFragment]) -> usize {
+    let mut max_width = 4usize;
+    for frag in frags {
+        let w = if frag.is_text() {
+            frag.rendered_text()
+                .split_whitespace()
+                .map(display_width)
+                .max()
+                .unwrap_or(0)
+                .min(12)
+        } else {
+            frag.display_width()
+        };
+        max_width = max_width.max(w);
+    }
+    max_width
 }
 
 fn fit_table_widths(col_widths: &mut [usize], min_widths: &[usize], render_width: usize) {
@@ -300,80 +358,132 @@ fn fit_table_widths(col_widths: &mut [usize], min_widths: &[usize], render_width
     }
 }
 
-fn wrap_table_cell(text: &str, width: usize) -> Vec<String> {
+fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment>> {
     if width == 0 {
-        return vec![String::new()];
+        return vec![vec![]];
     }
-    let expanded = expand_tabs(text, 0);
-    if expanded.is_empty() {
-        return vec![String::new()];
+    if frags.is_empty() {
+        return vec![vec![]];
     }
 
-    let mut lines = Vec::new();
-    let mut current = String::new();
+    let mut lines: Vec<Vec<CellFragment>> = Vec::new();
+    let mut current_line: Vec<CellFragment> = Vec::new();
     let mut current_width = 0usize;
 
-    for word in expanded.split_whitespace() {
-        let word_width = display_width(word);
+    for frag in frags {
+        match frag {
+            CellFragment::Text(t) => {
+                let expanded = expand_tabs(t, 0);
+                for word in expanded.split_whitespace() {
+                    let word_width = display_width(word);
 
-        if word_width > width {
-            if !current.is_empty() {
-                lines.push(std::mem::take(&mut current));
-                current_width = 0;
-            }
-            let mut chunk = String::new();
-            let mut chunk_width = 0usize;
-            for ch in word.chars() {
-                let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
-                if chunk_width + ch_width > width && !chunk.is_empty() {
-                    lines.push(std::mem::take(&mut chunk));
-                    chunk_width = 0;
+                    if word_width > width {
+                        if !current_line.is_empty() || current_width > 0 {
+                            lines.push(std::mem::take(&mut current_line));
+                            current_width = 0;
+                        }
+                        let mut chunk = String::new();
+                        let mut chunk_width = 0usize;
+                        for ch in word.chars() {
+                            let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+                            if chunk_width + ch_width > width && !chunk.is_empty() {
+                                lines.push(vec![CellFragment::Text(std::mem::take(&mut chunk))]);
+                                chunk_width = 0;
+                            }
+                            chunk.push(ch);
+                            chunk_width += ch_width;
+                        }
+                        if !chunk.is_empty() {
+                            current_line.push(CellFragment::Text(chunk));
+                            current_width = chunk_width;
+                        }
+                        continue;
+                    }
+
+                    let sep = if current_width == 0 { 0 } else { 1 };
+                    if current_width + sep + word_width > width && current_width > 0 {
+                        lines.push(std::mem::take(&mut current_line));
+                        current_width = 0;
+                    }
+                    if current_width > 0 {
+                        current_line.push(CellFragment::Text(" ".to_string()));
+                        current_width += 1;
+                    }
+                    current_line.push(CellFragment::Text(word.to_string()));
+                    current_width += word_width;
                 }
-                chunk.push(ch);
-                chunk_width += ch_width;
             }
-            if !chunk.is_empty() {
-                current = chunk;
-                current_width = chunk_width;
+            CellFragment::Code(_) | CellFragment::InlineMath(_) => {
+                let frag_width = frag.display_width();
+                let sep = if current_width == 0 { 0 } else { 1 };
+                if current_width + sep + frag_width > width && current_width > 0 {
+                    lines.push(std::mem::take(&mut current_line));
+                    current_width = 0;
+                }
+                if current_width > 0 {
+                    current_line.push(CellFragment::Text(" ".to_string()));
+                    current_width += 1;
+                }
+                current_line.push(frag.clone());
+                current_width += frag_width;
             }
-            continue;
         }
-
-        let sep = if current.is_empty() { 0 } else { 1 };
-        if current_width + sep + word_width > width && !current.is_empty() {
-            lines.push(std::mem::take(&mut current));
-            current_width = 0;
-        }
-        if !current.is_empty() {
-            current.push(' ');
-            current_width += 1;
-        }
-        current.push_str(word);
-        current_width += word_width;
     }
 
-    if !current.is_empty() {
-        lines.push(current);
+    if !current_line.is_empty() {
+        lines.push(current_line);
     }
     if lines.is_empty() {
-        lines.push(String::new());
+        lines.push(vec![]);
     }
     lines
 }
 
-fn align_cell(text: &str, width: usize, align: Alignment) -> String {
-    let text = expand_tabs(text, 0);
-    let len = display_width(&text);
-    if len >= width {
-        return text;
-    }
-    let pad = width - len;
-    match align {
-        Alignment::Right => format!("{}{}", " ".repeat(pad), text),
-        Alignment::Center => {
-            let l = pad / 2;
-            format!("{}{}{}", " ".repeat(l), text, " ".repeat(pad - l))
+fn align_cell(
+    frags: &[CellFragment],
+    width: usize,
+    align: Alignment,
+    base_style: Style,
+    theme: &crate::theme::MarkdownTheme,
+) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut content_width = 0usize;
+
+    for frag in frags {
+        match frag {
+            CellFragment::Text(t) => {
+                let expanded = expand_tabs(t, 0);
+                content_width += display_width(&expanded);
+                spans.push(Span::styled(expanded, base_style));
+            }
+            CellFragment::Code(_) | CellFragment::InlineMath(_) => {
+                let styled = format!(" {} ", frag.rendered_text());
+                content_width += display_width(&styled);
+                let (fg, bg) = match frag {
+                    CellFragment::Code(_) => (theme.inline_code_fg, theme.inline_code_bg),
+                    _ => (theme.latex_inline_fg, theme.latex_inline_bg),
+                };
+                spans.push(Span::styled(styled, Style::default().fg(fg).bg(bg)));
+            }
         }
-        _ => format!("{}{}", text, " ".repeat(pad)),
     }
+
+    if content_width < width {
+        let pad = width - content_width;
+        match align {
+            Alignment::Right => {
+                spans.insert(0, Span::styled(" ".repeat(pad), base_style));
+            }
+            Alignment::Center => {
+                let l = pad / 2;
+                spans.insert(0, Span::styled(" ".repeat(l), base_style));
+                spans.push(Span::styled(" ".repeat(pad - l), base_style));
+            }
+            _ => {
+                spans.push(Span::styled(" ".repeat(pad), base_style));
+            }
+        }
+    }
+
+    spans
 }
