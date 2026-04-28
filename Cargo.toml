@@ -21,3 +21,4 @@ serde         = { version = "1.0", features = ["derive"] }
 semver        = "1.0"
 sha2          = "0.10"
 unicodeit     = "0.2"
+mmdflux       = "2.1"

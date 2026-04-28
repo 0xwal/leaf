@@ -93,6 +93,10 @@ pub(crate) struct MarkdownTheme {
     pub(crate) latex_inline_fg: Color,
     pub(crate) latex_inline_bg: Color,
     pub(crate) latex_block_fg: Color,
+    pub(crate) mermaid_keyword: Color,
+    pub(crate) mermaid_arrow: Color,
+    pub(crate) mermaid_label: Color,
+    pub(crate) mermaid_block_fg: Color,
 }
 
 const BASE_LIGHT_UI: UiTheme = UiTheme {
@@ -198,6 +202,10 @@ const BASE_LIGHT_MARKDOWN: MarkdownTheme = MarkdownTheme {
     latex_inline_fg: Color::Rgb(128, 68, 148),
     latex_inline_bg: Color::Rgb(236, 226, 240),
     latex_block_fg: Color::Rgb(108, 58, 128),
+    mermaid_keyword: Color::Rgb(0, 128, 128),
+    mermaid_arrow: Color::Rgb(90, 120, 150),
+    mermaid_label: Color::Rgb(28, 140, 120),
+    mermaid_block_fg: Color::Rgb(68, 108, 118),
 };
 
 const BASE_DARK_MARKDOWN: MarkdownTheme = MarkdownTheme {
@@ -231,6 +239,10 @@ const BASE_DARK_MARKDOWN: MarkdownTheme = MarkdownTheme {
     latex_inline_fg: Color::Rgb(200, 160, 225),
     latex_inline_bg: Color::Rgb(38, 28, 48),
     latex_block_fg: Color::Rgb(195, 155, 220),
+    mermaid_keyword: Color::Rgb(80, 200, 200),
+    mermaid_arrow: Color::Rgb(120, 160, 200),
+    mermaid_label: Color::Rgb(100, 210, 180),
+    mermaid_block_fg: Color::Rgb(160, 190, 200),
 };
 
 pub(crate) const ARCTIC_THEME: AppTheme = AppTheme {
@@ -307,6 +319,10 @@ pub(crate) const FOREST_THEME: AppTheme = AppTheme {
         latex_inline_fg: Color::Rgb(192, 162, 218),
         latex_inline_bg: Color::Rgb(34, 28, 42),
         latex_block_fg: Color::Rgb(188, 158, 214),
+        mermaid_keyword: Color::Rgb(80, 190, 170),
+        mermaid_arrow: Color::Rgb(100, 170, 200),
+        mermaid_label: Color::Rgb(90, 200, 160),
+        mermaid_block_fg: Color::Rgb(150, 185, 170),
     },
 };
 
@@ -384,6 +400,10 @@ pub(crate) const SOLARIZED_DARK_THEME: AppTheme = AppTheme {
         latex_inline_fg: Color::Rgb(108, 113, 196),
         latex_inline_bg: Color::Rgb(14, 48, 58),
         latex_block_fg: Color::Rgb(108, 113, 196),
+        mermaid_keyword: Color::Rgb(42, 161, 152),
+        mermaid_arrow: Color::Rgb(38, 139, 210),
+        mermaid_label: Color::Rgb(88, 182, 172),
+        mermaid_block_fg: Color::Rgb(131, 148, 150),
     },
 };
 
