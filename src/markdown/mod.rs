@@ -356,13 +356,12 @@ fn push_heading_lines(
         1 => theme.heading_1,
         2 => theme.heading_2,
         3 => theme.heading_3,
+        4 => theme.heading_4,
         _ => theme.heading_other,
     };
     let modifier = match level {
-        1 | 2 => Modifier::BOLD,
-        3 | 4 => Modifier::BOLD | Modifier::UNDERLINED,
-        5 => Modifier::UNDERLINED,
-        _ => Modifier::ITALIC | Modifier::DIM,
+        1..=5 => Modifier::BOLD,
+        _ => Modifier::ITALIC,
     };
     let heading_style = Style::default().fg(color).add_modifier(modifier);
     let title: String = spans.iter().map(|s| s.content.as_ref()).collect();
@@ -378,7 +377,7 @@ fn push_heading_lines(
             if span.style.bg.is_some() {
                 style.fg = span.style.fg;
                 style.bg = span.style.bg;
-                style.sub_modifier = modifier.difference(Modifier::UNDERLINED);
+                style.sub_modifier = modifier;
             } else if span.style.fg == Some(theme.link_text)
                 || span.style.fg == Some(theme.link_icon)
             {
