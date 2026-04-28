@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.15.7](https://github.com/RivoLink/leaf/releases/tag/1.15.7)] - 2026-04-28
+
+### Changed
+
+- improve heading style ([#57](https://github.com/RivoLink/leaf/pull/57))
+
 ## [[1.15.6](https://github.com/RivoLink/leaf/releases/tag/1.15.6)] - 2026-04-27
 
 ### Fixed
