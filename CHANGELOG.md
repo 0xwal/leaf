@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.17.0](https://github.com/RivoLink/leaf/releases/tag/1.17.0)] - 2026-04-28
+
+### Docs
+
+- frontmatter yaml support ([#62](https://github.com/RivoLink/leaf/pull/62))
+
+### Added
+
+- frontmatter yaml support ([#61](https://github.com/RivoLink/leaf/pull/61))
+
 ## [[1.16.0](https://github.com/RivoLink/leaf/releases/tag/1.16.0)] - 2026-04-28
 
 ### Docs
