@@ -809,7 +809,7 @@ dependencies = [
 
 [[package]]
 name = "leaf"
-version = "1.15.7"
+version = "1.16.0"
 dependencies = [
  "anyhow",
  "crossterm",

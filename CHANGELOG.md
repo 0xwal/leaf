@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.16.0](https://github.com/RivoLink/leaf/releases/tag/1.16.0)] - 2026-04-28
+
+### Docs
+
+- mermaid render support ([#60](https://github.com/RivoLink/leaf/pull/60))
+
+### Added
+
+- mermaid render support ([#59](https://github.com/RivoLink/leaf/pull/59))
+
 ## [[1.15.7](https://github.com/RivoLink/leaf/releases/tag/1.15.7)] - 2026-04-28
 
 ### Changed
