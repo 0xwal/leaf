@@ -148,6 +148,7 @@ cat TESTING.md | leaf
 - **Live preview** — Watch mode with automatic reload and visual feedback.
 - **File picker** — Fuzzy Markdown picker, directory browser, and watch after selection.
 - **Editor integration** — Open the current file in your preferred editor.
+- **Frontmatter support** — YAML frontmatter rendered as a table (horizontal or vertical based on key count).
 - **Rich Markdown rendering** — Tables, lists, blockquotes, rules, bold, italic, and strikethrough.
 - **Syntax highlighting** — Common aliases like `py`, `cpp`, `json`, `toml`, `ps1`, `dockerfile`.
 - **LaTeX support** — Inline, block, and `latex` / `tex` code blocks rendered as formulas.

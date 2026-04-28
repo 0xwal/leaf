@@ -134,6 +134,7 @@ Source: [demo-navigation.md](sources/demo-navigation.md)
 ![Navigation](images/demo-navigation.png)
 
 **Et aussi :**
+- **Frontmatter** : métadonnées YAML rendues en tableau pleine largeur (horizontal si peu de clés, vertical si 5+)
 - **Blockquotes** : imbrication multi-niveaux avec marqueurs verticaux, texte en italique, peut contenir des listes et du code
 - **Listes imbriquées** : puces Unicode par niveau (puce, cercle, triangle), couleurs distinctes, listes ordonnées avec numérotation
 - **Titres** : H1 souligné avec double ligne, H2 avec ligne simple, H3 en gras, H4+ avec couleurs distinctes
