@@ -134,6 +134,7 @@ Source: [demo-navigation.md](sources/demo-navigation.md)
 ![Navigation](images/demo-navigation.png)
 
 **And also:**
+- **Frontmatter**: YAML metadata rendered as a full-width table (horizontal for few keys, vertical for 5+)
 - **Blockquotes**: multi-level nesting with vertical markers, italic text, can contain lists and code
 - **Nested lists**: Unicode bullets per level (bullet, circle, triangle), distinct colors, ordered lists with numbering
 - **Headings**: H1 underlined with double lines, H2 with single lines, H3 bold, H4+ with distinct colors
