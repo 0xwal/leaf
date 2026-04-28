@@ -1,4 +1,5 @@
 mod latex;
+mod mermaid;
 mod tables;
 pub(crate) mod toc;
 pub(crate) mod width;
@@ -486,15 +487,27 @@ fn push_code_block_lines(
     code_buf.clear();
 }
 
-fn push_latex_block_lines(
+struct SpecialBlockCtx<'a, F: Fn(&str) -> Vec<Span<'static>>> {
+    label: &'a str,
+    content_lines: &'a [&'a str],
+    show_line_numbers: bool,
+    center: bool,
+    make_spans: F,
+}
+
+fn push_special_block_lines<F: Fn(&str) -> Vec<Span<'static>>>(
     lines: &mut Vec<Line<'static>>,
-    content: &str,
     render_width: usize,
     theme: &MarkdownTheme,
     blockquote_depth: usize,
     list_stack: &[ListKind],
     item_stack: &mut [ItemState],
+    ctx: SpecialBlockCtx<'_, F>,
 ) {
+    let label = ctx.label;
+    let content_lines = ctx.content_lines;
+    let show_line_numbers = ctx.show_line_numbers;
+    let center = ctx.center;
     let prefix = if !item_stack.is_empty() {
         list_item_prefix(blockquote_depth > 0, list_stack, item_stack)
     } else if blockquote_depth > 0 {
@@ -510,14 +523,14 @@ fn push_latex_block_lines(
     let frame_style = Style::default().fg(theme.code_frame);
     let label_style = Style::default().fg(theme.code_label);
     let gutter_style = Style::default().fg(theme.code_gutter);
-    let content_style = Style::default().fg(theme.latex_block_fg);
 
-    let label = "latex";
-    let rendered_content = latex::to_unicode(content);
-    let content_lines: Vec<&str> = rendered_content.lines().collect();
     let total_lines = content_lines.len().max(1);
-    let digit_width = total_lines.to_string().len();
-    let gutter_width = digit_width + 2;
+    let (digit_width, gutter_width) = if show_line_numbers {
+        let dw = total_lines.to_string().len();
+        (dw, dw + 2)
+    } else {
+        (0, 1)
+    };
 
     let max_text = content_lines
         .iter()
@@ -545,17 +558,39 @@ fn push_latex_block_lines(
     ]);
     lines.push(Line::from(header));
 
+    let center_pad = if center {
+        " ".repeat(content_width.saturating_sub(max_text) / 2)
+    } else {
+        String::new()
+    };
+    let border_only = if !show_line_numbers {
+        Some(Span::styled("│".to_string(), gutter_style))
+    } else {
+        None
+    };
+
     for (i, content_line) in content_lines.iter().enumerate() {
-        let line_num = i + 1;
-        let num_gutter = Span::styled(format!("│{:>w$}│", line_num, w = digit_width), gutter_style);
-        let blank_gutter = Span::styled(format!("│{:>w$}│", "", w = digit_width), gutter_style);
-        let content_spans = vec![Span::styled(content_line.to_string(), content_style)];
+        let mut content_spans = (ctx.make_spans)(content_line);
+        if !center_pad.is_empty() {
+            content_spans.insert(0, Span::raw(center_pad.clone()));
+        }
 
         let mut first_prefix = prefix.clone();
-        first_prefix.push(num_gutter);
-
         let mut cont_prefix = prefix.clone();
-        cont_prefix.push(blank_gutter);
+        if let Some(ref border) = border_only {
+            first_prefix.push(border.clone());
+            cont_prefix.push(border.clone());
+        } else {
+            let line_num = i + 1;
+            first_prefix.push(Span::styled(
+                format!("│{:>w$}│", line_num, w = digit_width),
+                gutter_style,
+            ));
+            cont_prefix.push(Span::styled(
+                format!("│{:>w$}│", "", w = digit_width),
+                gutter_style,
+            ));
+        }
 
         push_wrapped_code_lines(
             lines,
@@ -568,16 +603,92 @@ fn push_latex_block_lines(
     }
 
     let mut footer = prefix;
-    footer.push(Span::styled(
-        format!(
-            "└{}┴{}┘",
-            "─".repeat(gutter_width - 2),
-            "─".repeat(inner_width.saturating_sub(gutter_width - 1))
-        ),
-        frame_style,
-    ));
+    if show_line_numbers {
+        footer.push(Span::styled(
+            format!(
+                "└{}┴{}┘",
+                "─".repeat(gutter_width - 2),
+                "─".repeat(inner_width.saturating_sub(gutter_width - 1))
+            ),
+            frame_style,
+        ));
+    } else {
+        footer.push(Span::styled(
+            format!("└{}┘", "─".repeat(inner_width)),
+            frame_style,
+        ));
+    }
     lines.push(Line::from(footer));
     lines.push(Line::from(""));
+}
+
+fn push_latex_block_lines(
+    lines: &mut Vec<Line<'static>>,
+    content: &str,
+    render_width: usize,
+    theme: &MarkdownTheme,
+    blockquote_depth: usize,
+    list_stack: &[ListKind],
+    item_stack: &mut [ItemState],
+) {
+    let rendered = latex::to_unicode(content);
+    let content_lines: Vec<&str> = rendered.lines().collect();
+    let content_style = Style::default().fg(theme.latex_block_fg);
+    push_special_block_lines(
+        lines,
+        render_width,
+        theme,
+        blockquote_depth,
+        list_stack,
+        item_stack,
+        SpecialBlockCtx {
+            label: "latex",
+            content_lines: &content_lines,
+            show_line_numbers: true,
+            center: false,
+            make_spans: |line| vec![Span::styled(line.to_string(), content_style)],
+        },
+    );
+}
+
+fn push_mermaid_block_lines(
+    lines: &mut Vec<Line<'static>>,
+    content: &str,
+    render_width: usize,
+    theme: &MarkdownTheme,
+    blockquote_depth: usize,
+    list_stack: &[ListKind],
+    item_stack: &mut [ItemState],
+) {
+    let rendered = mermaid::render(content);
+    let use_rendered = rendered.is_some();
+    let content_lines: Vec<&str> = if let Some(ref r) = rendered {
+        r.lines().collect()
+    } else {
+        content.lines().collect()
+    };
+    let content_style = Style::default().fg(theme.mermaid_block_fg);
+    push_special_block_lines(
+        lines,
+        render_width,
+        theme,
+        blockquote_depth,
+        list_stack,
+        item_stack,
+        SpecialBlockCtx {
+            label: "mermaid",
+            content_lines: &content_lines,
+            show_line_numbers: !use_rendered,
+            center: use_rendered,
+            make_spans: |line| {
+                if use_rendered {
+                    vec![Span::styled(line.to_string(), content_style)]
+                } else {
+                    mermaid::colorize_line(line, theme)
+                }
+            },
+        },
+    );
 }
 
 fn inline_text_style(
@@ -973,6 +1084,18 @@ pub(crate) fn parse_markdown_with_width(
                 in_code = false;
                 if code_lang == "latex" || code_lang == "tex" {
                     push_latex_block_lines(
+                        &mut lines,
+                        &code_buf,
+                        render_width,
+                        theme_colors,
+                        blockquote_depth,
+                        &list_stack,
+                        &mut item_stack,
+                    );
+                    code_buf.clear();
+                    code_lang.clear();
+                } else if code_lang == "mermaid" {
+                    push_mermaid_block_lines(
                         &mut lines,
                         &code_buf,
                         render_width,

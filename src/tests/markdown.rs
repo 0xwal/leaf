@@ -537,3 +537,162 @@ fn table_inline_code_col_width_includes_padding() {
         "border and cell lines should have same width"
     );
 }
+
+#[test]
+fn mermaid_block_renders_in_framed_block() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown("```mermaid\ngraph TD\n  A --> B\n```\n", &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(
+        rendered.iter().any(|line| line.contains("┌─ mermaid")),
+        "expected mermaid block header"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains('A')),
+        "expected node A in rendered content"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains('B')),
+        "expected node B in rendered content"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains("└")),
+        "expected mermaid block footer"
+    );
+}
+
+#[test]
+fn mermaid_block_in_blockquote_has_quote_prefix() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown(
+        "> ```mermaid\n> graph LR\n>   X --> Y\n> ```\n",
+        &ss,
+        &theme,
+    );
+    let rendered = rendered_non_empty_lines(&lines);
+
+    let header = rendered
+        .iter()
+        .find(|line| line.contains("┌─ mermaid"))
+        .expect("expected mermaid block header in blockquote");
+    assert!(
+        header.starts_with('▏'),
+        "mermaid block in blockquote should have quote prefix"
+    );
+}
+
+#[test]
+fn mermaid_content_is_searchable() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown(
+        "```mermaid\nsequenceDiagram\n  A->>B: Hello\n```\n",
+        &ss,
+        &theme,
+    );
+    let searchable = markdown::width::build_searchable_lines(&lines);
+
+    assert!(
+        searchable.iter().any(|line| line.contains('A')),
+        "mermaid content should be searchable (node A)"
+    );
+    assert!(
+        searchable.iter().any(|line| line.contains("Hello")),
+        "mermaid content should be searchable (message Hello)"
+    );
+}
+
+#[test]
+fn mermaid_rendered_block_has_no_gutter() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown(
+        "```mermaid\ngraph TD\n  A --> B\n  B --> C\n```\n",
+        &ss,
+        &theme,
+    );
+    let rendered = rendered_non_empty_lines(&lines);
+    let content_lines: Vec<_> = rendered
+        .iter()
+        .filter(|l| !l.contains('┌') && !l.contains('└'))
+        .collect();
+
+    assert!(
+        content_lines.iter().all(|line| !line.contains("│1│")),
+        "rendered mermaid should not have numbered gutter"
+    );
+}
+
+#[test]
+fn mermaid_fallback_has_numbered_gutter() {
+    let (ss, theme) = test_assets();
+    let src = "```mermaid\ngantt\n  title Schedule\n  section Dev\n```\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(
+        rendered.iter().any(|line| line.contains("│1│")),
+        "fallback mermaid should have numbered gutter"
+    );
+}
+
+#[test]
+fn mermaid_pie_renders_bar_chart() {
+    let (ss, theme) = test_assets();
+    let src = "```mermaid\npie title Languages\n  \"Rust\" : 65\n  \"Go\" : 35\n```\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(
+        rendered.iter().any(|line| line.contains("┌─ mermaid")),
+        "expected mermaid block header for pie"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains("Languages")),
+        "expected pie chart title"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains("Rust")),
+        "expected Rust label in pie chart"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains('█')),
+        "expected bar characters in pie chart"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains('%')),
+        "expected percentage in pie chart"
+    );
+}
+
+#[test]
+fn mermaid_unsupported_type_falls_back_to_colored_source() {
+    let (ss, theme) = test_assets();
+    let src = "```mermaid\ngantt\n  title Schedule\n  section Phase 1\n```\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(
+        rendered.iter().any(|line| line.contains("┌─ mermaid")),
+        "expected mermaid block header"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains("gantt")),
+        "unsupported type should show source (gantt keyword)"
+    );
+}
+
+#[test]
+fn mermaid_empty_block_renders_without_crash() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown("```mermaid\n```\n", &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(
+        rendered.iter().any(|line| line.contains("┌─ mermaid")),
+        "expected mermaid block header for empty block"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains("└")),
+        "expected mermaid block footer for empty block"
+    );
+}
