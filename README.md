@@ -235,3 +235,23 @@ npm:
 ```bash
 npm uninstall -g @rivolink/leaf
 ```
+
+## Contributors
+
+Thanks to all contributors.
+
+![Contributors](https://contrib.rocks/image?repo=RivoLink/leaf)
+
+## Support
+
+Contributions are welcome. Feel free to open an issue or submit a pull request.
+
+See the [CONTRIBUTING.md](CONTRIBUTING.md) file for details.
+
+If you like **leaf**, consider giving the project a star ⭐
+
+## License
+
+This project is licensed under the MIT License.
+
+See the [LICENSE](LICENSE) file for details.
