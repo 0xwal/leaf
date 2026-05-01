@@ -12,7 +12,7 @@ sequenceDiagram
     participant U as User
     participant T as Terminal
     participant L as Leaf
-    U->>T: ─ leaf README.md ─
-    L-->>T: ┄ render preview ┄
-    U->>L: ─ q (quit) ─
+    U->>T: leaf README.md
+    L-->>T: render preview
+    U->>L: q (quit)
 ```

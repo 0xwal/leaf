@@ -922,16 +922,18 @@ dependencies = [
 
 [[package]]
 name = "mmdflux"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d0b6ca1d0104601d29af4bb7bbbb144cfc76a9675ceb6396538839e32541b20"
+checksum = "de3b706bf5db9aa579fee6334414d117e54bd9cd17155f662fc18398ff775e1f"
 dependencies = [
  "clap",
+ "libc",
  "pest",
  "pest_derive",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
