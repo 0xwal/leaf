@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.18.1](https://github.com/RivoLink/leaf/releases/tag/1.18.1)] - 2026-05-01
+
+### Docs
+
+- add contributing section ([#69](https://github.com/RivoLink/leaf/pull/69))
+- add installation instructions for AUR ([#68](https://github.com/RivoLink/leaf/pull/68))
+
+### Fixed
+
+- use tty input reader for piped stdin on macOS ([#67](https://github.com/RivoLink/leaf/pull/67))
+
+### Changed
+
+- update mmdflux version ([#70](https://github.com/RivoLink/leaf/pull/70))
+
 ## [[1.18.0](https://github.com/RivoLink/leaf/releases/tag/1.18.0)] - 2026-04-30
 
 ### Docs
