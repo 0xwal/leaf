@@ -9,6 +9,7 @@ pub(crate) enum ThemePreset {
     Forest = 1,
     OceanDark = 2,
     SolarizedDark = 3,
+    Ansi = 4,
 }
 
 impl Default for ThemePreset {
@@ -17,11 +18,56 @@ impl Default for ThemePreset {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub(crate) struct AppTheme {
     pub(crate) syntax_theme_name: &'static str,
     pub(crate) ui: UiTheme,
     pub(crate) markdown: MarkdownTheme,
+    pub(crate) theme_ui: ThemeUiColors,
+    pub(crate) ansi: AnsiColors,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy)]
+pub(crate) struct ThemeUiColors {
+    pub(crate) foreground: Color,
+    pub(crate) background: Color,
+    pub(crate) caret: Color,
+    pub(crate) line_highlight: Color,
+    pub(crate) accent: Color,
+    pub(crate) selection: Color,
+    pub(crate) selection_foreground: Color,
+    pub(crate) gutter: Color,
+    pub(crate) gutter_foreground: Color,
+    pub(crate) highlight: Color,
+    pub(crate) find_highlight: Color,
+    pub(crate) find_highlight_foreground: Color,
+    pub(crate) brackets_foreground: Color,
+    pub(crate) tags_foreground: Color,
+    pub(crate) active_guide: Color,
+    pub(crate) stack_guide: Color,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy)]
+pub(crate) struct AnsiColors {
+    pub(crate) black: Color,
+    pub(crate) red: Color,
+    pub(crate) green: Color,
+    pub(crate) yellow: Color,
+    pub(crate) blue: Color,
+    pub(crate) magenta: Color,
+    pub(crate) cyan: Color,
+    pub(crate) white: Color,
+    pub(crate) bright_black: Color,
+    pub(crate) bright_red: Color,
+    pub(crate) bright_green: Color,
+    pub(crate) bright_yellow: Color,
+    pub(crate) bright_blue: Color,
+    pub(crate) bright_magenta: Color,
+    pub(crate) bright_cyan: Color,
+    pub(crate) bright_white: Color,
 }
 
 #[derive(Clone, Copy)]
@@ -99,6 +145,157 @@ pub(crate) struct MarkdownTheme {
     pub(crate) mermaid_block_fg: Color,
 }
 
+const BASE_LIGHT_THEME_UI: ThemeUiColors = ThemeUiColors {
+    foreground: Color::Rgb(58, 68, 78),
+    background: Color::Rgb(242, 247, 250),
+    caret: Color::Rgb(76, 122, 168),
+    line_highlight: Color::Rgb(232, 239, 245),
+    accent: Color::Rgb(76, 122, 168),
+    selection: Color::Rgb(209, 221, 232),
+    selection_foreground: Color::Rgb(58, 68, 78),
+    gutter: Color::Rgb(232, 239, 245),
+    gutter_foreground: Color::Rgb(132, 148, 164),
+    highlight: Color::Rgb(170, 182, 194),
+    find_highlight: Color::Rgb(232, 223, 164),
+    find_highlight_foreground: Color::Rgb(58, 68, 78),
+    brackets_foreground: Color::Rgb(92, 108, 126),
+    tags_foreground: Color::Rgb(58, 108, 168),
+    active_guide: Color::Rgb(132, 148, 164),
+    stack_guide: Color::Rgb(170, 182, 194),
+};
+
+const BASE_LIGHT_ANSI: AnsiColors = AnsiColors {
+    black: Color::Rgb(48, 58, 68),
+    red: Color::Rgb(188, 74, 74),
+    green: Color::Rgb(48, 140, 98),
+    yellow: Color::Rgb(180, 142, 28),
+    blue: Color::Rgb(58, 108, 168),
+    magenta: Color::Rgb(128, 68, 148),
+    cyan: Color::Rgb(0, 128, 128),
+    white: Color::Rgb(180, 192, 204),
+    bright_black: Color::Rgb(98, 112, 126),
+    bright_red: Color::Rgb(210, 100, 100),
+    bright_green: Color::Rgb(70, 170, 120),
+    bright_yellow: Color::Rgb(210, 170, 50),
+    bright_blue: Color::Rgb(76, 122, 168),
+    bright_magenta: Color::Rgb(150, 90, 170),
+    bright_cyan: Color::Rgb(30, 150, 150),
+    bright_white: Color::Rgb(220, 228, 236),
+};
+
+const FOREST_THEME_UI: ThemeUiColors = ThemeUiColors {
+    foreground: Color::Rgb(212, 218, 212),
+    background: Color::Rgb(19, 26, 22),
+    caret: Color::Rgb(126, 198, 170),
+    line_highlight: Color::Rgb(26, 36, 30),
+    accent: Color::Rgb(127, 179, 255),
+    selection: Color::Rgb(34, 46, 38),
+    selection_foreground: Color::Rgb(216, 224, 216),
+    gutter: Color::Rgb(22, 32, 26),
+    gutter_foreground: Color::Rgb(50, 66, 60),
+    highlight: Color::Rgb(50, 66, 54),
+    find_highlight: Color::Rgb(74, 78, 32),
+    find_highlight_foreground: Color::Rgb(212, 218, 212),
+    brackets_foreground: Color::Rgb(102, 118, 106),
+    tags_foreground: Color::Rgb(127, 179, 255),
+    active_guide: Color::Rgb(82, 104, 92),
+    stack_guide: Color::Rgb(60, 78, 66),
+};
+
+const FOREST_ANSI: AnsiColors = AnsiColors {
+    black: Color::Rgb(36, 48, 40),
+    red: Color::Rgb(224, 120, 120),
+    green: Color::Rgb(120, 198, 148),
+    yellow: Color::Rgb(236, 214, 123),
+    blue: Color::Rgb(127, 179, 255),
+    magenta: Color::Rgb(192, 162, 218),
+    cyan: Color::Rgb(80, 190, 170),
+    white: Color::Rgb(184, 190, 170),
+    bright_black: Color::Rgb(70, 82, 72),
+    bright_red: Color::Rgb(240, 140, 140),
+    bright_green: Color::Rgb(140, 218, 168),
+    bright_yellow: Color::Rgb(255, 234, 143),
+    bright_blue: Color::Rgb(147, 199, 255),
+    bright_magenta: Color::Rgb(212, 182, 238),
+    bright_cyan: Color::Rgb(100, 210, 190),
+    bright_white: Color::Rgb(224, 230, 210),
+};
+
+const SOLARIZED_THEME_UI: ThemeUiColors = ThemeUiColors {
+    foreground: Color::Rgb(147, 161, 161),
+    background: Color::Rgb(0, 43, 54),
+    caret: Color::Rgb(42, 161, 152),
+    line_highlight: Color::Rgb(7, 54, 66),
+    accent: Color::Rgb(38, 139, 210),
+    selection: Color::Rgb(17, 67, 80),
+    selection_foreground: Color::Rgb(238, 232, 213),
+    gutter: Color::Rgb(0, 36, 44),
+    gutter_foreground: Color::Rgb(88, 110, 117),
+    highlight: Color::Rgb(88, 110, 117),
+    find_highlight: Color::Rgb(92, 74, 22),
+    find_highlight_foreground: Color::Rgb(147, 161, 161),
+    brackets_foreground: Color::Rgb(101, 123, 131),
+    tags_foreground: Color::Rgb(38, 139, 210),
+    active_guide: Color::Rgb(88, 110, 117),
+    stack_guide: Color::Rgb(66, 88, 96),
+};
+
+const SOLARIZED_ANSI: AnsiColors = AnsiColors {
+    black: Color::Rgb(7, 54, 66),
+    red: Color::Rgb(220, 50, 47),
+    green: Color::Rgb(133, 153, 0),
+    yellow: Color::Rgb(181, 137, 0),
+    blue: Color::Rgb(38, 139, 210),
+    magenta: Color::Rgb(108, 113, 196),
+    cyan: Color::Rgb(42, 161, 152),
+    white: Color::Rgb(147, 161, 161),
+    bright_black: Color::Rgb(0, 43, 54),
+    bright_red: Color::Rgb(203, 75, 22),
+    bright_green: Color::Rgb(88, 110, 117),
+    bright_yellow: Color::Rgb(101, 123, 131),
+    bright_blue: Color::Rgb(131, 148, 150),
+    bright_magenta: Color::Rgb(131, 148, 150),
+    bright_cyan: Color::Rgb(42, 161, 152),
+    bright_white: Color::Rgb(238, 232, 213),
+};
+
+const BASE_DARK_THEME_UI: ThemeUiColors = ThemeUiColors {
+    foreground: Color::Rgb(208, 210, 218),
+    background: Color::Rgb(18, 20, 28),
+    caret: Color::Rgb(105, 178, 218),
+    line_highlight: Color::Rgb(28, 32, 48),
+    accent: Color::Rgb(123, 109, 255),
+    selection: Color::Rgb(42, 40, 46),
+    selection_foreground: Color::Rgb(224, 224, 228),
+    gutter: Color::Rgb(22, 24, 36),
+    gutter_foreground: Color::Rgb(40, 48, 68),
+    highlight: Color::Rgb(52, 52, 58),
+    find_highlight: Color::Rgb(72, 62, 16),
+    find_highlight_foreground: Color::Rgb(208, 210, 218),
+    brackets_foreground: Color::Rgb(88, 88, 96),
+    tags_foreground: Color::Rgb(123, 109, 255),
+    active_guide: Color::Rgb(58, 68, 98),
+    stack_guide: Color::Rgb(42, 52, 68),
+};
+
+const BASE_DARK_ANSI: AnsiColors = AnsiColors {
+    black: Color::Rgb(42, 44, 58),
+    red: Color::Rgb(218, 95, 95),
+    green: Color::Rgb(120, 210, 170),
+    yellow: Color::Rgb(240, 200, 60),
+    blue: Color::Rgb(105, 178, 218),
+    magenta: Color::Rgb(180, 130, 220),
+    cyan: Color::Rgb(80, 200, 200),
+    white: Color::Rgb(160, 164, 180),
+    bright_black: Color::Rgb(62, 64, 78),
+    bright_red: Color::Rgb(240, 120, 120),
+    bright_green: Color::Rgb(140, 230, 190),
+    bright_yellow: Color::Rgb(255, 220, 80),
+    bright_blue: Color::Rgb(125, 198, 238),
+    bright_magenta: Color::Rgb(200, 150, 240),
+    bright_cyan: Color::Rgb(100, 220, 220),
+    bright_white: Color::Rgb(220, 224, 240),
+};
 const BASE_LIGHT_UI: UiTheme = UiTheme {
     toc_bg: Color::Rgb(232, 239, 245),
     toc_border: Color::Rgb(170, 182, 194),
@@ -249,6 +446,8 @@ pub(crate) const ARCTIC_THEME: AppTheme = AppTheme {
     syntax_theme_name: "base16-ocean.light",
     ui: BASE_LIGHT_UI,
     markdown: BASE_LIGHT_MARKDOWN,
+    theme_ui: BASE_LIGHT_THEME_UI,
+    ansi: BASE_LIGHT_ANSI,
 };
 
 pub(crate) const FOREST_THEME: AppTheme = AppTheme {
@@ -324,12 +523,16 @@ pub(crate) const FOREST_THEME: AppTheme = AppTheme {
         mermaid_label: Color::Rgb(90, 200, 160),
         mermaid_block_fg: Color::Rgb(150, 185, 170),
     },
+    theme_ui: FOREST_THEME_UI,
+    ansi: FOREST_ANSI,
 };
 
 pub(crate) const OCEAN_DARK_THEME: AppTheme = AppTheme {
     syntax_theme_name: "base16-ocean.dark",
     ui: BASE_DARK_UI,
     markdown: BASE_DARK_MARKDOWN,
+    theme_ui: BASE_DARK_THEME_UI,
+    ansi: BASE_DARK_ANSI,
 };
 
 pub(crate) const SOLARIZED_DARK_THEME: AppTheme = AppTheme {
@@ -405,14 +608,134 @@ pub(crate) const SOLARIZED_DARK_THEME: AppTheme = AppTheme {
         mermaid_label: Color::Rgb(88, 182, 172),
         mermaid_block_fg: Color::Rgb(131, 148, 150),
     },
+    theme_ui: SOLARIZED_THEME_UI,
+    ansi: SOLARIZED_ANSI,
+};
+
+const ANSI_THEME_UI: ThemeUiColors = ThemeUiColors {
+    foreground: Color::Rgb(192, 192, 192),
+    background: Color::Rgb(0, 0, 0),
+    caret: Color::Rgb(255, 255, 255),
+    line_highlight: Color::Rgb(32, 32, 32),
+    accent: Color::Rgb(0, 128, 255),
+    selection: Color::Rgb(48, 48, 48),
+    selection_foreground: Color::Rgb(255, 255, 255),
+    gutter: Color::Rgb(16, 16, 16),
+    gutter_foreground: Color::Rgb(128, 128, 128),
+    highlight: Color::Rgb(64, 64, 64),
+    find_highlight: Color::Rgb(64, 48, 0),
+    find_highlight_foreground: Color::Rgb(192, 192, 192),
+    brackets_foreground: Color::Rgb(128, 128, 128),
+    tags_foreground: Color::Rgb(0, 128, 255),
+    active_guide: Color::Rgb(48, 48, 48),
+    stack_guide: Color::Rgb(32, 32, 32),
+};
+
+const ANSI_ANSI_COLORS: AnsiColors = AnsiColors {
+    black: Color::Rgb(0, 0, 0),
+    red: Color::Rgb(170, 0, 0),
+    green: Color::Rgb(0, 170, 0),
+    yellow: Color::Rgb(170, 85, 0),
+    blue: Color::Rgb(0, 0, 170),
+    magenta: Color::Rgb(170, 0, 170),
+    cyan: Color::Rgb(0, 170, 170),
+    white: Color::Rgb(170, 170, 170),
+    bright_black: Color::Rgb(85, 85, 85),
+    bright_red: Color::Rgb(255, 85, 85),
+    bright_green: Color::Rgb(85, 255, 85),
+    bright_yellow: Color::Rgb(255, 255, 85),
+    bright_blue: Color::Rgb(85, 85, 255),
+    bright_magenta: Color::Rgb(255, 85, 255),
+    bright_cyan: Color::Rgb(85, 255, 255),
+    bright_white: Color::Rgb(255, 255, 255),
+};
+
+const ANSI_MARKDOWN: MarkdownTheme = MarkdownTheme {
+    search_highlight_bg: Color::Rgb(64, 48, 0),
+    code_gutter: Color::Rgb(128, 128, 128),
+    blockquote_marker: Color::Rgb(128, 128, 128),
+    list_level_1: Color::Rgb(0, 170, 0),
+    list_level_2: Color::Rgb(0, 0, 170),
+    list_level_3: Color::Rgb(170, 170, 170),
+    ordered_list: Color::Rgb(0, 170, 0),
+    table_border: Color::Rgb(128, 128, 128),
+    table_separator: Color::Rgb(85, 85, 85),
+    table_header: Color::Rgb(85, 85, 255),
+    table_cell: Color::Rgb(170, 170, 170),
+    heading_1: Color::Rgb(85, 85, 255),
+    heading_2: Color::Rgb(0, 170, 0),
+    heading_3: Color::Rgb(170, 85, 0),
+    heading_4: Color::Rgb(0, 170, 170),
+    heading_other: Color::Rgb(170, 170, 170),
+    heading_underline: Color::Rgb(85, 85, 85),
+    code_frame: Color::Rgb(128, 128, 128),
+    code_label: Color::Rgb(170, 170, 170),
+    inline_code_fg: Color::Rgb(255, 255, 85),
+    inline_code_bg: Color::Rgb(32, 32, 32),
+    rule: Color::Rgb(85, 85, 85),
+    link_icon: Color::Rgb(85, 85, 255),
+    link_text: Color::Rgb(85, 85, 255),
+    blockquote_text: Color::Rgb(128, 128, 128),
+    text: Color::Rgb(192, 192, 192),
+    strong_text: Color::Rgb(255, 255, 255),
+    latex_inline_fg: Color::Rgb(170, 0, 170),
+    latex_inline_bg: Color::Rgb(32, 16, 32),
+    latex_block_fg: Color::Rgb(170, 0, 170),
+    mermaid_keyword: Color::Rgb(0, 170, 170),
+    mermaid_arrow: Color::Rgb(85, 85, 255),
+    mermaid_label: Color::Rgb(0, 170, 0),
+    mermaid_block_fg: Color::Rgb(128, 128, 128),
+};
+
+pub(crate) const ANSI_THEME: AppTheme = AppTheme {
+  syntax_theme_name: "base16-ocean.dark",
+  ui: UiTheme {
+    toc_bg: Color::Reset,
+    toc_border: Color::DarkGray,
+    content_bg: Color::Reset,
+    scrollbar_hover: Color::LightBlue,
+    status_bg: Color::Reset,
+    status_separator: Color::Gray,
+    status_brand_fg: Color::Reset,
+    status_brand_bg: Color::Reset,
+    status_filename_fg: Color::Gray,
+    status_filename_bg: Color::Reset,
+    status_watch_fg: Color::Green,
+    status_watch_bg: Color::Reset,
+    status_reloaded_fg: Color::Black,
+    status_reloaded_bg: Color::Reset,
+    status_search_fg: Color::Yellow,
+    status_search_bg: Color::Reset,
+    status_success_fg: Color::Green,
+    status_success_bg: Color::Reset,
+    status_warning_fg: Color::Yellow,
+    status_error_fg: Color::Red,
+    status_error_bg: Color::Reset,
+    status_shortcut_fg: Color::DarkGray,
+    status_percent_fg: Color::LightBlue,
+    toc_header_fg: Color::Gray,
+    toc_active_bg: Color::Reset,
+    toc_inactive_bg: Color::Reset,
+    toc_accent: Color::LightBlue,
+    toc_index_inactive: Color::DarkGray,
+    toc_primary_active: Color::White,
+    toc_primary_inactive: Color::Gray,
+    toc_secondary_inactive: Color::DarkGray,
+    toc_secondary_text_active: Color::White,
+    toc_secondary_text_inactive: Color::Gray,
+  },
+  markdown: ANSI_MARKDOWN,
+  theme_ui: ANSI_THEME_UI,
+  ansi: ANSI_ANSI_COLORS,
 };
 
 pub(crate) const DEFAULT_PRESET: ThemePreset = ThemePreset::OceanDark;
-pub(crate) const THEME_PRESETS: [ThemePreset; 4] = [
+pub(crate) const THEME_PRESETS: [ThemePreset; 5] = [
     ThemePreset::Arctic,
     ThemePreset::Forest,
     ThemePreset::OceanDark,
     ThemePreset::SolarizedDark,
+    ThemePreset::Ansi,
 ];
 static CURRENT_PRESET: AtomicU8 = AtomicU8::new(DEFAULT_PRESET as u8);
 
@@ -422,6 +745,7 @@ pub(crate) fn parse_theme_preset(name: &str) -> Option<ThemePreset> {
         "ocean" | "ocean-dark" | "dark" => Some(ThemePreset::OceanDark),
         "forest" => Some(ThemePreset::Forest),
         "solarized" | "solarized-dark" => Some(ThemePreset::SolarizedDark),
+        "ansi" => Some(ThemePreset::Ansi),
         _ => None,
     }
 }
@@ -432,6 +756,7 @@ pub(crate) fn theme_preset_label(preset: ThemePreset) -> &'static str {
         ThemePreset::OceanDark => "Ocean Dark",
         ThemePreset::Forest => "Forest",
         ThemePreset::SolarizedDark => "Solarized Dark",
+        ThemePreset::Ansi => "ANSI",
     }
 }
 
@@ -448,6 +773,7 @@ pub(crate) fn theme_by_preset(preset: ThemePreset) -> &'static AppTheme {
         ThemePreset::OceanDark => &OCEAN_DARK_THEME,
         ThemePreset::Forest => &FOREST_THEME,
         ThemePreset::SolarizedDark => &SOLARIZED_DARK_THEME,
+        ThemePreset::Ansi => &ANSI_THEME,
     }
 }
 
@@ -461,6 +787,7 @@ pub(crate) fn current_theme_preset() -> ThemePreset {
         1 => ThemePreset::Forest,
         2 => ThemePreset::OceanDark,
         3 => ThemePreset::SolarizedDark,
+        4 => ThemePreset::Ansi,
         _ => DEFAULT_PRESET,
     }
 }
@@ -471,4 +798,35 @@ pub(crate) fn app_theme() -> &'static AppTheme {
 
 pub(crate) fn current_syntect_theme(themes: &ThemeSet) -> &Theme {
     &themes.themes[app_theme().syntax_theme_name]
+}
+
+#[allow(dead_code)]
+fn syntect_color_to_ratatui(c: syntect::highlighting::Color, _fallback: Color) -> Color {
+    Color::Rgb(c.r, c.g, c.b)
+}
+
+#[allow(dead_code)]
+pub(crate) fn theme_ui_from_syntect(theme: &Theme) -> ThemeUiColors {
+  let s = &theme.settings;
+  let default_fg = Color::Gray;
+  let default_bg = Color::Reset;
+
+  ThemeUiColors {
+    foreground: s.foreground.map_or(default_fg, |c| syntect_color_to_ratatui(c, default_fg)),
+    background: s.background.map_or(default_bg, |c| syntect_color_to_ratatui(c, default_bg)),
+    caret: s.caret.map_or(default_fg, |c| syntect_color_to_ratatui(c, default_fg)),
+    line_highlight: s.line_highlight.map_or(default_bg, |c| syntect_color_to_ratatui(c, default_bg)),
+    accent: s.accent.map_or(default_fg, |c| syntect_color_to_ratatui(c, default_fg)),
+    selection: s.selection.map_or(Color::DarkGray, |c| syntect_color_to_ratatui(c, default_fg)),
+    selection_foreground: s.selection_foreground.map_or(default_fg, |c| syntect_color_to_ratatui(c, default_fg)),
+    gutter: s.gutter.map_or(default_bg, |c| syntect_color_to_ratatui(c, default_bg)),
+    gutter_foreground: s.gutter_foreground.map_or(Color::DarkGray, |c| syntect_color_to_ratatui(c, default_fg)),
+    highlight: s.highlight.map_or(Color::DarkGray, |c| syntect_color_to_ratatui(c, default_fg)),
+    find_highlight: s.find_highlight.map_or(Color::Yellow, |c| syntect_color_to_ratatui(c, default_fg)),
+    find_highlight_foreground: s.find_highlight_foreground.map_or(default_fg, |c| syntect_color_to_ratatui(c, default_fg)),
+    brackets_foreground: s.brackets_foreground.map_or(Color::DarkGray, |c| syntect_color_to_ratatui(c, default_fg)),
+    tags_foreground: s.tags_foreground.map_or(default_fg, |c| syntect_color_to_ratatui(c, default_fg)),
+    active_guide: s.active_guide.map_or(Color::Blue, |c| syntect_color_to_ratatui(c, default_fg)),
+    stack_guide: s.stack_guide.map_or(Color::DarkGray, |c| syntect_color_to_ratatui(c, default_fg)),
+  }
 }
