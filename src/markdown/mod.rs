@@ -1126,6 +1126,16 @@ pub(crate) fn parse_markdown_with_width(
                 last_block = LastBlock::Other;
             }
             MdEvent::Start(Tag::List(start)) => {
+                if !item_stack.is_empty() && !spans.is_empty() {
+                    flush_list_item_spans(
+                        &mut lines,
+                        &mut spans,
+                        &list_stack,
+                        &mut item_stack,
+                        blockquote_depth,
+                        render_width,
+                    );
+                }
                 start_list(&mut lines, last_block, &mut list_stack, start);
                 last_block = LastBlock::Other;
             }

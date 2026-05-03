@@ -141,6 +141,50 @@ fn wrapped_list_items_align_continuation_under_text() {
 }
 
 #[test]
+fn tight_nested_list_separates_parent_and_children() {
+    let (ss, theme) = test_assets();
+    let src = "- parent\n  - child 1\n  - child 2\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert_eq!(rendered, vec!["• parent", "  ◦ child 1", "  ◦ child 2"]);
+}
+
+#[test]
+fn tight_nested_list_three_levels_uses_correct_markers() {
+    let (ss, theme) = test_assets();
+    let src = "- level 1\n  - level 2\n    - level 3\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert_eq!(rendered, vec!["• level 1", "  ◦ level 2", "    ▸ level 3"]);
+}
+
+#[test]
+fn tight_nested_list_unordered_parent_with_ordered_children() {
+    let (ss, theme) = test_assets();
+    let src = "- parent\n  1. first\n  2. second\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert_eq!(rendered, vec!["• parent", "  1. first", "  2. second"]);
+}
+
+#[test]
+fn tight_nested_list_multiline_parent_with_softbreak() {
+    let (ss, theme) = test_assets();
+    let src = "- parent line one\n  parent line two\n  - child\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(rendered.iter().any(|line| line == "• parent line one"));
+    assert!(rendered
+        .iter()
+        .any(|line| line.starts_with("  ") && line.contains("parent line two")));
+    assert!(rendered.iter().any(|line| line == "  ◦ child"));
+}
+
+#[test]
 fn paragraph_and_following_code_block_have_no_blank_gap() {
     let (ss, theme) = test_assets();
     let src = "Intro paragraph\n\n```rs\nfn main() {}\n```\n";
